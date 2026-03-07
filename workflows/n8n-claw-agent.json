@@ -396,6 +396,17 @@
           }
         ]
       ]
+    },
+    "Library Manager": {
+      "ai_tool": [
+        [
+          {
+            "node": "AI Agent",
+            "type": "ai_tool",
+            "index": 0
+          }
+        ]
+      ]
     }
   },
   "nodes": [
@@ -1100,6 +1111,33 @@
       "typeVersion": 1.2,
       "position": [
         3600,
+        208
+      ]
+    },
+    {
+      "parameters": {
+        "name": "library_manager",
+        "description": "Manage the MCP template library. Install, list, or remove MCP server templates from the catalog.\n\nActions:\n- list_templates: Show available templates. Optional: category filter.\n- install_template: Install a template by ID. Creates the MCP server workflow.\n- remove_template: Remove an installed template by ID.\n\nInput: JSON with action and parameters.\nExamples:\n{\"action\":\"list_templates\"}\n{\"action\":\"list_templates\",\"category\":\"weather\"}\n{\"action\":\"install_template\",\"id\":\"weather-alpine\"}\n{\"action\":\"remove_template\",\"id\":\"weather-alpine\"}",
+        "workflowId": {
+          "__rl": true,
+          "value": "REPLACE_LIBRARY_MANAGER_ID",
+          "mode": "id"
+        },
+        "workflowInputs": {
+          "mappingMode": "defineBelow",
+          "value": {},
+          "matchingColumns": [],
+          "schema": [],
+          "attemptToConvertTypes": false,
+          "convertFieldsToString": false
+        }
+      },
+      "id": "tool-library-manager",
+      "name": "Library Manager",
+      "type": "@n8n/n8n-nodes-langchain.toolWorkflow",
+      "typeVersion": 2.2,
+      "position": [
+        3728,
         208
       ]
     }

@@ -1069,6 +1069,12 @@ ALTER TABLE public.user_profiles
   ADD COLUMN IF NOT EXISTS setup_done boolean DEFAULT false,
   ADD COLUMN IF NOT EXISTS setup_step integer DEFAULT 0;
 
+-- Template Registry columns (Phase 1: Library Manager)
+ALTER TABLE public.mcp_registry
+  ADD COLUMN IF NOT EXISTS template_id text,
+  ADD COLUMN IF NOT EXISTS template_type text DEFAULT 'custom',
+  ADD COLUMN IF NOT EXISTS sub_workflow_id text;
+
 -- Roles already created at top of file (before GRANTs)
 GRANT ALL ON SCHEMA public TO supabase_admin;
 GRANT ALL ON ALL TABLES IN SCHEMA public TO supabase_admin;
