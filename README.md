@@ -145,6 +145,7 @@ Sub-workflows (called by other workflows, no manual activation needed):
 |---|---|
 | 🔌 MCP Client | Agent — calls tools on MCP Servers |
 | 📚 MCP Library Manager | Agent — installs/removes MCP templates from catalog |
+| 🔐 credential-form | Library Manager — secure form for entering API keys |
 
 ### Step 4 — Start chatting
 
@@ -201,6 +202,15 @@ Instead of building every MCP server from scratch, you can install pre-built tem
 The Library Manager fetches templates from GitHub, imports the workflows into n8n, and registers the new MCP server automatically.
 
 > ⚠️ After installing a template: **deactivate → reactivate** the new MCP workflow in n8n UI (same webhook bug as MCP Builder).
+
+**Templates with API keys:** Some templates require an API key (e.g. NewsAPI). When you install one, the agent sends you a secure one-time link via Telegram. Click it, enter your key — done. The key is stored in the database and the template reads it at runtime. Links expire after 10 minutes and can only be used once.
+
+> "Install news-newsapi"
+> → Agent sends a link to enter your NewsAPI key
+> → Enter key in the form → template works immediately
+
+You can also regenerate a credential link later:
+> "Add credential for news-newsapi"
 
 Want to create your own templates? See the [template contribution guide](https://github.com/freddy-schuetz/n8n-claw-templates#creating-a-template).
 
@@ -314,6 +324,8 @@ Edit the `soul` and `agents` tables directly in Supabase Studio (`http://localho
 | `heartbeat_config` | Heartbeat + morning briefing settings (enabled, last_run, intervals) |
 | `tools_config` | API keys for Anthropic, embedding provider — used by Heartbeat + Consolidation |
 | `mcp_registry` | Available MCP servers (name, URL, tools) |
+| `template_credentials` | API keys for MCP templates (entered via credential form) |
+| `credential_tokens` | One-time tokens for secure credential entry (10 min TTL) |
 | `conversations` | Full chat history (session-based) |
 | `memory_long` | Long-term memory with vector embeddings (semantic search) |
 | `memory_daily` | Daily interaction log (used by Memory Consolidation) |
