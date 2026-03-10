@@ -11,11 +11,11 @@ Talk to your agent in natural language — it manages tasks, remembers context a
 - **Task management** — create, track, and complete tasks with priorities and due dates
 - **Proactive heartbeat** — automatically reminds you of overdue/urgent tasks
 - **Morning briefing** — daily summary of your tasks at a time you choose
-- **MCP Server Builder** — builds new API integrations on demand (just ask: *"build me an MCP server for the GitHub API"*)
+- **MCP Skills** — install pre-built skills or build new API integrations on demand
 - **Smart reminders** — timed Telegram reminders ("remind me in 2 hours to...")
 - **Scheduled actions** — the agent executes instructions at a set time ("search HN for AI news at 9am")
 - **Web search** — searches the web via built-in SearXNG instance (no API key needed)
-- **Extensible** — add new tools and capabilities through natural language
+- **Extensible** — add new skills and capabilities through natural language or from the skill catalog
 
 ## Architecture
 
@@ -25,9 +25,9 @@ Telegram
 n8n-claw Agent (Claude Sonnet)
   ├── Task Manager        — create, track, complete tasks
   ├── Memory Save/Search  — long-term memory with vector search
-  ├── MCP Client          → calls tools on MCP Servers
-  ├── MCP Builder          → creates new MCP Servers automatically
-  ├── Library Manager     → install/remove MCP templates from catalog
+  ├── MCP Client          → calls tools on MCP skill servers
+  ├── Library Manager     → install/remove skills from catalog
+  ├── MCP Builder          → builds custom skills from scratch
   ├── Reminder            — timed reminders + scheduled actions
   ├── HTTP Tool           — simple web requests
   ├── Web Search          — search the web (SearXNG)
@@ -137,7 +137,7 @@ These workflows need to be **activated manually** in n8n UI:
 
 | Workflow | Purpose |
 |---|---|
-| 🏗️ MCP Builder | Builds new MCP Server workflows on demand |
+| 🏗️ MCP Builder | Builds custom MCP skills on demand |
 | 🌤️ MCP: Weather | Example MCP Server — weather via Open-Meteo (no API key) |
 | ⚙️ WorkflowBuilder | Builds general n8n automations *(optional — requires [extra setup](#optional-workflowbuilder-with-claude-code))* |
 
@@ -145,8 +145,8 @@ Sub-workflows (called by other workflows, no manual activation needed):
 
 | Workflow | Called by |
 |---|---|
-| 🔌 MCP Client | Agent — calls tools on MCP Servers |
-| 📚 MCP Library Manager | Agent — installs/removes MCP templates from catalog |
+| 🔌 MCP Client | Agent — calls tools on MCP skill servers |
+| 📚 MCP Library Manager | Agent — installs/removes skills from catalog |
 | ⏰ ReminderFactory | Agent — saves reminders/tasks to database |
 | 🔐 credential-form | Library Manager — secure form for entering API keys |
 
@@ -178,9 +178,35 @@ Then open `http://localhost:3001` in your browser. The tunnel stays open as long
 
 ---
 
-## Building new MCP tools
+## MCP Skills Library
 
-Just ask your agent:
+Install pre-built skills from the [skill catalog](https://github.com/freddy-schuetz/n8n-claw-templates) — no coding required. Just ask your agent:
+
+> "What skills are available?"
+> "Install weather-openmeteo"
+> "Remove weather-openmeteo"
+
+The Library Manager fetches skill templates from GitHub, imports the workflows into n8n, and registers the new MCP server automatically.
+
+> ⚠️ After installing a skill: **deactivate → reactivate** the new MCP workflow in n8n UI (required due to a webhook registration bug in n8n).
+
+**Skills with API keys:** Some skills require an API key (e.g. NewsAPI). When you install one, the agent sends you a secure one-time link via Telegram. Click it, enter your key — done. The key is stored in the database and the skill reads it at runtime. Links expire after 10 minutes and can only be used once.
+
+> "Install news-newsapi"
+> → Agent sends a link to enter your NewsAPI key
+> → Enter key in the form → skill works immediately
+
+You can also regenerate a credential link later:
+> "Add credential for news-newsapi"
+
+Want to create your own skills? See the [template contribution guide](https://github.com/freddy-schuetz/n8n-claw-templates#creating-a-template).
+
+---
+
+## Building custom MCP Skills
+
+For APIs not covered by the skill catalog, ask your agent to build one from scratch:
+
 > "Build me an MCP server for the OpenLibrary API — look up books by ISBN"
 
 The MCP Builder will:
@@ -190,32 +216,7 @@ The MCP Builder will:
 4. Register the server in the database
 5. Update the agent so it knows about the new tool
 
-> ⚠️ After each MCP build: **deactivate → reactivate** the new MCP workflow in n8n UI (required due to a webhook registration bug in n8n).
-
----
-
-## MCP Template Library
-
-Instead of building every MCP server from scratch, you can install pre-built templates from the [template catalog](https://github.com/freddy-schuetz/n8n-claw-templates). Just ask your agent:
-
-> "What templates are available?"
-> "Install weather-openmeteo"
-> "Remove weather-openmeteo"
-
-The Library Manager fetches templates from GitHub, imports the workflows into n8n, and registers the new MCP server automatically.
-
-> ⚠️ After installing a template: **deactivate → reactivate** the new MCP workflow in n8n UI (same webhook bug as MCP Builder).
-
-**Templates with API keys:** Some templates require an API key (e.g. NewsAPI). When you install one, the agent sends you a secure one-time link via Telegram. Click it, enter your key — done. The key is stored in the database and the template reads it at runtime. Links expire after 10 minutes and can only be used once.
-
-> "Install news-newsapi"
-> → Agent sends a link to enter your NewsAPI key
-> → Enter key in the form → template works immediately
-
-You can also regenerate a credential link later:
-> "Add credential for news-newsapi"
-
-Want to create your own templates? See the [template contribution guide](https://github.com/freddy-schuetz/n8n-claw-templates#creating-a-template).
+> ⚠️ After each MCP build: **deactivate → reactivate** the new MCP workflow in n8n UI (same webhook bug as skill install).
 
 ---
 
