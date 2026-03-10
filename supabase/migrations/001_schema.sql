@@ -1058,6 +1058,59 @@ GRANT ALL ON SEQUENCE public.reminders_id_seq TO anon;
 GRANT ALL ON SEQUENCE public.reminders_id_seq TO authenticated;
 GRANT ALL ON SEQUENCE public.reminders_id_seq TO service_role;
 
+--
+-- Name: projects; Type: TABLE; Schema: public; Owner: postgres
+--
+
+CREATE TABLE IF NOT EXISTS public.projects (
+    id integer NOT NULL,
+    name text NOT NULL,
+    status text DEFAULT 'active'::text NOT NULL,
+    content text DEFAULT ''::text NOT NULL,
+    created_at timestamp with time zone DEFAULT now(),
+    updated_at timestamp with time zone DEFAULT now(),
+    CONSTRAINT projects_status_check CHECK ((status = ANY (ARRAY['active'::text, 'paused'::text, 'completed'::text])))
+);
+
+ALTER TABLE public.projects OWNER TO postgres;
+
+CREATE SEQUENCE IF NOT EXISTS public.projects_id_seq
+    AS integer
+    START WITH 1
+    INCREMENT BY 1
+    NO MINVALUE
+    NO MAXVALUE
+    CACHE 1;
+
+ALTER TABLE public.projects_id_seq OWNER TO postgres;
+
+ALTER SEQUENCE public.projects_id_seq OWNED BY public.projects.id;
+
+ALTER TABLE ONLY public.projects ALTER COLUMN id SET DEFAULT nextval('public.projects_id_seq'::regclass);
+
+-- Use DO block for idempotent constraint creation
+DO $$
+BEGIN
+  IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'projects_pkey') THEN
+    ALTER TABLE ONLY public.projects ADD CONSTRAINT projects_pkey PRIMARY KEY (id);
+  END IF;
+  IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'projects_name_key') THEN
+    ALTER TABLE ONLY public.projects ADD CONSTRAINT projects_name_key UNIQUE (name);
+  END IF;
+END $$;
+
+CREATE INDEX IF NOT EXISTS idx_projects_status ON public.projects USING btree (status);
+CREATE INDEX IF NOT EXISTS idx_projects_updated ON public.projects USING btree (updated_at DESC);
+
+GRANT ALL ON TABLE public.projects TO anon;
+GRANT ALL ON TABLE public.projects TO authenticated;
+GRANT ALL ON TABLE public.projects TO service_role;
+
+GRANT ALL ON SEQUENCE public.projects_id_seq TO anon;
+GRANT ALL ON SEQUENCE public.projects_id_seq TO authenticated;
+GRANT ALL ON SEQUENCE public.projects_id_seq TO service_role;
+
+
 -- Migration: add type column to reminders (idempotent for updates)
 DO $$
 BEGIN
