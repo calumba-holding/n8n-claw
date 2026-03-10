@@ -231,7 +231,11 @@
     },
     {
       "parameters": {
-        "workflowId": "REPLACE_AGENT_WORKFLOW_ID",
+        "workflowId": {
+          "__rl": true,
+          "value": "REPLACE_AGENT_WORKFLOW_ID",
+          "mode": "id"
+        },
         "options": {
           "waitForSubWorkflow": false
         },
