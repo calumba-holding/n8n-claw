@@ -595,7 +595,7 @@ for f in workflows/*.json; do
   [ -n "$OPENAI_CRED_ID" ] && \
     sed -i "s|REPLACE_WITH_YOUR_OPENAI_CREDENTIAL_ID\", \"name\": \"OpenAI API\"|${OPENAI_CRED_ID}\", \"name\": \"OpenAI API\"|g" "$out"
 done
-IMPORT_ORDER="mcp-client reminder-factory reminder-runner mcp-weather-example workflow-builder mcp-builder mcp-library-manager credential-form memory-consolidation heartbeat n8n-claw-agent"
+IMPORT_ORDER="mcp-client reminder-factory reminder-runner mcp-weather-example workflow-builder mcp-builder mcp-library-manager agent-library-manager sub-agent-runner credential-form memory-consolidation heartbeat n8n-claw-agent"
 
 # Fetch existing workflows once (for upsert: update if exists, create if not)
 EXISTING_WFS=$(curl -s "${N8N_BASE}/api/v1/workflows?limit=100" \
@@ -665,6 +665,8 @@ replacements = {
 
   'REPLACE_MCP_BUILDER_ID':      '${WF_IDS[mcp-builder]}',
   'REPLACE_LIBRARY_MANAGER_ID':  '${WF_IDS[mcp-library-manager]}',
+  'REPLACE_SUB_AGENT_RUNNER_ID': '${WF_IDS[sub-agent-runner]}',
+  'REPLACE_AGENT_LIBRARY_MANAGER_ID': '${WF_IDS[agent-library-manager]}',
 }
 for placeholder, real_id in replacements.items():
     raw = raw.replace(placeholder, real_id)
@@ -714,6 +716,8 @@ print(raw)
     echo "  ✅ WorkflowBuilder: ${WF_IDS[workflow-builder]}"
     echo "  ✅ MCP Builder:     ${WF_IDS[mcp-builder]}"
     echo "  ✅ Library Manager: ${WF_IDS[mcp-library-manager]}"
+    echo "  ✅ Sub-Agent Runner: ${WF_IDS[sub-agent-runner]}"
+    echo "  ✅ Agent Library:   ${WF_IDS[agent-library-manager]}"
     [ -n "$REAL_TELEGRAM_ID" ]  && echo "  ✅ Telegram cred:   ${REAL_TELEGRAM_ID}"
     [ -n "$REAL_POSTGRES_ID" ]  && echo "  ✅ Postgres cred:   ${REAL_POSTGRES_ID}"
     [ -n "$REAL_ANTHROPIC_ID" ] && echo "  ✅ Anthropic cred:  ${REAL_ANTHROPIC_ID} (if already added)"
@@ -796,6 +800,16 @@ if [ -n "$REMINDER_RUNNER_ID" ]; then
     -H "X-N8N-API-KEY: ${N8N_API_KEY}" > /dev/null 2>&1
   echo -e "  ${GREEN}✅ Reminder Runner workflow activated${NC}"
 fi
+
+# Activate sub-workflows (required since n8n 2.x)
+for SUB_WF in mcp-client mcp-builder mcp-library-manager agent-library-manager sub-agent-runner workflow-builder reminder-factory project-manager; do
+  SUB_WF_ID=${WF_IDS[$SUB_WF]}
+  if [ -n "$SUB_WF_ID" ]; then
+    curl -s -X POST "${N8N_BASE}/api/v1/workflows/${SUB_WF_ID}/activate" \
+      -H "X-N8N-API-KEY: ${N8N_API_KEY}" > /dev/null 2>&1
+  fi
+done
+echo -e "  ${GREEN}✅ Sub-workflows activated${NC}"
 
 # Helper for interactive prompts (used by both update and fresh install)
 cli_ask() {
@@ -1318,6 +1332,106 @@ if [ -n "$PROACTIVE_CHOICE" ]; then
 else
   echo -e "  ${GREEN}✅ Heartbeat config seeded${NC}"
 fi
+
+# ── Seed expert agents ────────────────────────────────────────
+echo -e "${CYAN}Seeding expert agents...${NC}"
+python3 - <<'PYEOF_AGENTS'
+import subprocess, os
+pw = os.environ.get('POSTGRES_PASSWORD', '')
+env = {**os.environ, 'PGPASSWORD': pw, 'LANG': 'C', 'LC_ALL': 'C'}
+
+sql = """
+INSERT INTO public.agents (key, content) VALUES
+  ('persona:research-expert', '# Research Expert
+
+## Expertise
+Web research, fact-checking, source evaluation, summarizing complex topics.
+
+## Workflow
+1. Analyze the topic and research question
+2. Research multiple independent sources (Web Search + HTTP)
+3. Cross-check facts and identify contradictions
+4. Deliver structured results with source citations
+
+## Quality Standards
+- Always cite sources (URLs, titles)
+- Transparently flag uncertainties and knowledge gaps
+- Never present speculation as fact
+- When sources contradict: present both sides
+- Check and note the timeliness of information'),
+
+  ('persona:content-creator', '# Content Creator
+
+## Expertise
+Copywriting, social media content, blog articles, marketing copy, creative writing.
+
+## Workflow
+1. Analyze target audience and channel
+2. Adapt tone and style to platform (Instagram, LinkedIn, Blog, etc.)
+3. Provide multiple variants or suggestions when useful
+4. Consider SEO-relevant keywords for web content
+
+## Quality Standards
+- Texts are ready to use (correct length, format, hashtags)
+- Tone matches the target audience and platform
+- Clear call-to-actions when appropriate
+- No generic filler — be specific and concrete
+- For social media: platform-appropriate emoji use and formatting'),
+
+  ('persona:data-analyst', '# Data Analyst
+
+## Expertise
+Data analysis, pattern recognition, structured reports, KPI interpretation.
+
+## Workflow
+1. Assess data availability and quality
+2. Identify relevant metrics and KPIs
+3. Analyze trends, patterns, and outliers
+4. Present results in a structured, understandable format
+
+## Quality Standards
+- Always contextualize numbers (benchmarks, trends, comparisons)
+- Suggest visualizations when helpful (tables, lists, charts)
+- Transparently name methodological limitations
+- Derive actionable recommendations when possible
+- Distinguish between correlation and causation'),
+
+  ('telegram_status', 'You have a Telegram Status tool. Use it for brief progress updates during longer tasks, e.g.:
+- Before delegating to an expert agent: "🔍 Starting research expert..."
+- For project actions: "💾 Saving project context..."
+- For web research: "🌐 Searching for information..."
+Not for every small action — only when the user would otherwise wait >10 seconds without feedback.'),
+
+  ('expert_agents', 'You have Expert Agents — specialized sub-agents you can delegate tasks to.
+
+## Expert Agent Tool (expert_agent)
+Delegate a task to a specialized expert. Parameters:
+- agent: Agent identifier (e.g. "research-expert")
+- task: Detailed task description
+- context: Relevant conversation context (optional)
+
+The expert works independently and returns a structured result. You then rephrase it in your own tone.
+
+## Agent Library (agent_library tool)
+Install/remove expert agents from the catalog.
+Actions: list_agents, install_agent, remove_agent, list_installed
+
+## Currently installed Expert Agents (3 total):
+- **research-expert**: Web research, fact-checking, source evaluation, summarizing complex topics.
+- **content-creator**: Copywriting, social media content, blog articles, marketing copy, creative writing.
+- **data-analyst**: Data analysis, pattern recognition, structured reports, KPI interpretation.')
+
+ON CONFLICT (key) DO UPDATE SET content = EXCLUDED.content;
+"""
+
+result = subprocess.run(['psql','-h','localhost','-U','postgres','-d','postgres'],
+  input=sql, capture_output=True, text=True, env=env)
+if result.returncode != 0:
+    print('Expert agents SQL error:', result.stderr[:200])
+else:
+    print('  OK')
+PYEOF_AGENTS
+echo -e "  ${GREEN}✅ Expert agents seeded (research-expert, content-creator, data-analyst)${NC}"
 
 # ── Done ─────────────────────────────────────────────────────
 PUBLIC_IP=$(curl -s --max-time 3 https://api.ipify.org 2>/dev/null || echo "YOUR-VPS-IP")

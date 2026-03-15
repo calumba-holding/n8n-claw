@@ -11,6 +11,7 @@ Talk to your agent in natural language — it manages tasks, remembers context a
 - **Task management** — create, track, and complete tasks with priorities and due dates
 - **Proactive heartbeat** — automatically reminds you of overdue/urgent tasks
 - **Morning briefing** — daily summary of your tasks at a time you choose
+- **Expert agents** — delegate complex tasks to specialized sub-agents (3 included, expandable from catalog)
 - **MCP Skills** — install pre-built skills or build new API integrations on demand
 - **Smart reminders** — timed Telegram reminders ("remind me in 2 hours to...")
 - **Scheduled actions** — the agent executes instructions at a set time ("search HN for AI news at 9am")
@@ -32,6 +33,9 @@ n8n-claw Agent (Claude Sonnet)
   ├── Library Manager     → install/remove skills from catalog
   ├── MCP Builder          → builds custom skills from scratch
   ├── Reminder            — timed reminders + scheduled actions
+  ├── Expert Agent        → delegates to specialized sub-agents
+  ├── Agent Library       → install/remove expert agents from catalog
+  ├── Telegram Status     — sends progress updates during long tasks
   ├── HTTP Tool           — simple web requests
   ├── Web Search          — search the web (SearXNG)
   ├── Web Reader          — read webpages as markdown (Crawl4AI)
@@ -97,20 +101,29 @@ The easiest way is to open each workflow and click **"Create new credential"** d
 
 | Credential | Name (exact!) | Where needed |
 |---|---|---|
-| Postgres | `Supabase Postgres` | Agent (Load Soul, Load History, etc.) |
-| Anthropic API | `Anthropic API` | Agent (Claude node), MCP Builder |
+| Postgres | `Supabase Postgres` | Agent, Sub-Agent Runner |
+| Anthropic API | `Anthropic API` | Agent (Claude node), MCP Builder, Sub-Agent Runner |
 | Telegram Bot | `Telegram Bot` | Agent (Telegram Trigger + Reply) — *created automatically by setup* |
 | OpenAI API | `OpenAI API` | Agent (Voice transcription via Whisper) — *optional, created by setup if key provided* |
+
+**⚠️ After fresh install — connect credentials in these workflows:**
+
+| Workflow | Credentials to connect |
+|---|---|
+| 🤖 n8n-claw Agent | Postgres, Anthropic API, OpenAI API (optional) |
+| 🏗️ MCP Builder | Anthropic API (select on LLM node) |
+| 🧠 Sub-Agent Runner | Postgres, Anthropic API |
+
+**⚠️ After update (`./setup.sh`)** — credentials persist in the Agent and MCP Builder, but must be re-selected in:
+
+| Workflow | Credentials to re-connect |
+|---|---|
+| 🧠 Sub-Agent Runner | Postgres, Anthropic API |
 
 **Postgres connection details** *(shown in setup output)*:
 - Host: `db` | Port: `5432` | DB: `postgres` | User: `postgres`
 - Password: *(shown at end of setup)*
 - SSL: `disable`
-
-**MCP Builder — select LLM model:**
-- Open the MCP Builder workflow → click the LLM node
-- Select `Anthropic API` as the chat model
-- *(not set automatically due to n8n credential linking)*
 
 **Optional: Embeddings for semantic memory search:**
 
@@ -151,6 +164,8 @@ Sub-workflows (called by other workflows, no manual activation needed):
 |---|---|
 | 🔌 MCP Client | Agent — calls tools on MCP skill servers |
 | 📚 MCP Library Manager | Agent — installs/removes skills from catalog |
+| 🧠 Sub-Agent Runner | Agent — runs expert agents with loaded personas |
+| 📖 Agent Library Manager | Agent — installs/removes expert agents |
 | ⏰ ReminderFactory | Agent — saves reminders/tasks to database |
 | 🔐 credential-form | Library Manager — secure form for entering API keys |
 
@@ -218,6 +233,41 @@ Want to create your own skills? See the [template contribution guide](https://gi
 > **Mitigation:** Secure SSH access (key-based auth, no root password, fail2ban), and use API keys with minimal permissions where possible.
 >
 > Encryption at rest for skill credentials is planned and in progress.
+
+---
+
+## Expert Agents
+
+Delegate complex tasks to specialized sub-agents. Each expert has its own AI agent with a focused persona, tools (web search, HTTP requests, web reader, MCP), and works independently — then the main agent rephrases the result in its own tone.
+
+**Three experts are included by default:**
+
+| Agent | Speciality |
+|---|---|
+| 🔍 Research Expert | Web research, fact-checking, source evaluation, structured summaries |
+| ✍️ Content Creator | Copywriting, social media posts, blog articles, marketing copy |
+| 📊 Data Analyst | Data analysis, pattern recognition, KPI interpretation, structured reports |
+
+**Using expert agents:**
+
+> "Research the best hiking trails in Tyrol with sources"
+> "Write an Instagram post about our new product launch"
+> "Analyze these numbers and give me a summary"
+
+The agent automatically picks the right expert based on your request — or you can ask explicitly:
+
+> "Let the research expert look into this"
+> "Delegate this to the content creator"
+
+**Managing agents:**
+
+> "What expert agents do I have?"
+> "Install the data analyst"
+> "Remove the content creator"
+
+Install more experts from the [agent catalog](https://github.com/freddy-schuetz/n8n-claw-agents) or ask the community to contribute new ones.
+
+**Status updates:** During long-running expert tasks, the agent sends you Telegram progress updates so you know what's happening (e.g. "🔍 Starting research expert...").
 
 ---
 

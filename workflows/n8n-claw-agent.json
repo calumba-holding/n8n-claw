@@ -404,7 +404,7 @@
             "index": 0
           },
           {
-            "node": "Telegram Reply",
+            "node": "Split Long Message",
             "type": "main",
             "index": 0
           }
@@ -412,6 +412,17 @@
       ],
       "ai_tool": [
         []
+      ]
+    },
+    "Split Long Message": {
+      "main": [
+        [
+          {
+            "node": "Telegram Reply",
+            "type": "main",
+            "index": 0
+          }
+        ]
       ]
     },
     "Reminder": {
@@ -481,6 +492,39 @@
       ]
     },
     "Project Manager": {
+      "ai_tool": [
+        [
+          {
+            "node": "AI Agent",
+            "type": "ai_tool",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Expert Agent": {
+      "ai_tool": [
+        [
+          {
+            "node": "AI Agent",
+            "type": "ai_tool",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Agent Library": {
+      "ai_tool": [
+        [
+          {
+            "node": "AI Agent",
+            "type": "ai_tool",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Telegram Status": {
       "ai_tool": [
         [
           {
@@ -1059,9 +1103,22 @@
       }
     },
     {
+      "id": "split-long-message",
+      "name": "Split Long Message",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        3712,
+        -16
+      ],
+      "parameters": {
+        "jsCode": "const text = $('AI Agent').first().json.output || '';\nconst MAX = 4000; // Telegram limit is 4096, leave margin for formatting\n\nif (text.length <= MAX) {\n  return [{ json: { text } }];\n}\n\n// Split at paragraph boundaries\nconst chunks = [];\nlet remaining = text;\n\nwhile (remaining.length > MAX) {\n  let cutPoint = remaining.lastIndexOf('\\n\\n', MAX);\n  if (cutPoint < MAX * 0.3) {\n    // No good paragraph break — try single newline\n    cutPoint = remaining.lastIndexOf('\\n', MAX);\n  }\n  if (cutPoint < MAX * 0.3) {\n    // No good break at all — cut at space\n    cutPoint = remaining.lastIndexOf(' ', MAX);\n  }\n  if (cutPoint < MAX * 0.3) {\n    // Absolute fallback — hard cut\n    cutPoint = MAX;\n  }\n  chunks.push(remaining.substring(0, cutPoint).trim());\n  remaining = remaining.substring(cutPoint).trim();\n}\nif (remaining) chunks.push(remaining);\n\nreturn chunks.map(c => ({ json: { text: c } }));"
+      }
+    },
+    {
       "parameters": {
         "chatId": "={{ $('Build System Prompt').first().json.chatId }}",
-        "text": "={{ $('AI Agent').first().json.output }}",
+        "text": "={{ $json.text }}",
         "additionalFields": {
           "appendAttribution": false,
           "parse_mode": "Markdown"
@@ -1340,6 +1397,83 @@
         3856,
         208
       ]
+    },
+    {
+      "parameters": {
+        "name": "expert_agent",
+        "description": "Delegate a task to a specialized expert agent. The expert works independently with its own AI model and tools, then returns a structured result. You should rephrase the result in your own tone before replying to the user.\n\nParameters (JSON):\n- agent: Expert agent identifier (e.g. \"research-expert\", \"content-creator\", \"data-analyst\")\n- task: Detailed task description — be specific about what you need\n- context: Relevant conversation context the expert should know (optional)\n\nExamples:\n{\"agent\":\"research-expert\",\"task\":\"Recherchiere die besten Wanderwege in Tirol mit Schwierigkeitsgrad und Länge\",\"context\":\"User plant einen Wanderurlaub im Sommer\"}\n{\"agent\":\"content-creator\",\"task\":\"Erstelle einen Instagram-Post über unser neues Produkt\",\"context\":\"Produkt: AI-gestützter Kalender, Zielgruppe: junge Berufstätige\"}\n{\"agent\":\"data-analyst\",\"task\":\"Analysiere diese Verkaufszahlen und erstelle einen Report\",\"context\":\"Q1 2026: Jan 45k, Feb 52k, Mär 61k\"}",
+        "workflowId": {
+          "__rl": true,
+          "value": "REPLACE_SUB_AGENT_RUNNER_ID",
+          "mode": "id"
+        },
+        "workflowInputs": {
+          "mappingMode": "defineBelow",
+          "value": {},
+          "matchingColumns": [],
+          "schema": [],
+          "attemptToConvertTypes": false,
+          "convertFieldsToString": false
+        }
+      },
+      "id": "tool-expert-agent",
+      "name": "Expert Agent",
+      "type": "@n8n/n8n-nodes-langchain.toolWorkflow",
+      "typeVersion": 2.2,
+      "position": [
+        3984,
+        208
+      ]
+    },
+    {
+      "parameters": {
+        "name": "agent_library",
+        "description": "Manage the expert agent library. Install, list, or remove specialized expert agents from the catalog.\n\nActions:\n- list_agents: Show all available agents from the catalog (with installed status).\n- install_agent: Install an agent by ID. Downloads persona from catalog and saves to database.\n- remove_agent: Remove an installed agent by ID.\n- list_installed: Show only currently installed agents.\n\nInput: JSON with action and parameters.\nExamples:\n{\"action\":\"list_agents\"}\n{\"action\":\"install_agent\",\"id\":\"research-expert\"}\n{\"action\":\"remove_agent\",\"id\":\"research-expert\"}\n{\"action\":\"list_installed\"}",
+        "workflowId": {
+          "__rl": true,
+          "value": "REPLACE_AGENT_LIBRARY_MANAGER_ID",
+          "mode": "id"
+        },
+        "workflowInputs": {
+          "mappingMode": "defineBelow",
+          "value": {},
+          "matchingColumns": [],
+          "schema": [],
+          "attemptToConvertTypes": false,
+          "convertFieldsToString": false
+        }
+      },
+      "id": "tool-agent-library",
+      "name": "Agent Library",
+      "type": "@n8n/n8n-nodes-langchain.toolWorkflow",
+      "typeVersion": 2.2,
+      "position": [
+        4112,
+        208
+      ]
+    },
+    {
+      "parameters": {
+        "chatId": "{{TELEGRAM_CHAT_ID}}",
+        "text": "={{ $fromAI('Text', '', 'string') }}",
+        "additionalFields": {
+          "appendAttribution": false
+        }
+      },
+      "id": "tool-telegram-status",
+      "name": "Telegram Status",
+      "type": "n8n-nodes-base.telegramTool",
+      "typeVersion": 1.2,
+      "position": [
+        4240,
+        208
+      ],
+      "credentials": {
+        "telegramApi": {
+          "id": "REPLACE_WITH_YOUR_CREDENTIAL_ID",
+          "name": "Telegram Bot"
+        }
+      }
     }
   ]
 }
