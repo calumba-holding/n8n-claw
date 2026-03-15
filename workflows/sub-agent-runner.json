@@ -170,7 +170,7 @@
         "text": "={{ $json.userMessage }}",
         "options": {
           "systemMessage": "={{ $json.systemPrompt }}",
-          "maxIterations": 5
+          "maxIterations": 15
         }
       }
     },
