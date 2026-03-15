@@ -1454,6 +1454,7 @@
     },
     {
       "parameters": {
+        "chatId": "{{TELEGRAM_CHAT_ID}}",
         "additionalFields": {
           "appendAttribution": false,
           "parse_mode": "Markdown"
