@@ -135,7 +135,7 @@
       "typeVersion": 2,
       "position": [192, 0],
       "parameters": {
-        "jsCode": "const raw = $json.query || '';\nlet parsed = {};\ntry {\n  parsed = typeof raw === 'string' ? JSON.parse(raw) : raw;\n} catch(e) {\n  parsed = { agent: 'unknown', task: raw, context: '' };\n}\nreturn [{\n  json: {\n    agent: parsed.agent || 'unknown',\n    task: parsed.task || '',\n    context: parsed.context || ''\n  }\n}];"
+        "jsCode": "const raw = $json.query || '';\nlet parsed = {};\ntry {\n  let toParse = raw;\n  if (typeof toParse === 'string') {\n    const start = toParse.indexOf('{');\n    const end = toParse.lastIndexOf('}');\n    if (start !== -1 && end > start) {\n      toParse = toParse.substring(start, end + 1);\n    }\n    parsed = JSON.parse(toParse);\n  } else {\n    parsed = toParse;\n  }\n} catch(e) {\n  parsed = { agent: 'unknown', task: raw, context: '' };\n}\nreturn [{\n  json: {\n    agent: parsed.agent || 'unknown',\n    task: parsed.task || '',\n    context: parsed.context || ''\n  }\n}];"
       }
     },
     {
