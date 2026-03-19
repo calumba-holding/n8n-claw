@@ -607,6 +607,8 @@ for wf in data.get('data', []):
       -e "s|{{TELEGRAM_CHAT_ID}}|${TELEGRAM_CHAT_ID}|g" \
       -e "s|{{CREDENTIAL_FORM_WEBHOOK_ID}}|${CREDENTIAL_FORM_WEBHOOK_ID}|g" \
       -e "s|{{WEBHOOK_SECRET}}|${WEBHOOK_SECRET}|g" \
+      -e "s|{{PAPERCLIP_INTERNAL_URL}}|${PAPERCLIP_INTERNAL_URL}|g" \
+      -e "s|{{PAPERCLIP_AGENT_KEY}}|${PAPERCLIP_AGENT_KEY}|g" \
       "$out"
 
     # Patch credential IDs
@@ -670,6 +672,8 @@ for f in workflows/*.json workflows/adapters/*.json; do
     -e "s|{{TELEGRAM_CHAT_ID}}|${TELEGRAM_CHAT_ID}|g" \
     -e "s|{{CREDENTIAL_FORM_WEBHOOK_ID}}|${CREDENTIAL_FORM_WEBHOOK_ID}|g" \
     -e "s|{{WEBHOOK_SECRET}}|${WEBHOOK_SECRET}|g" \
+    -e "s|{{PAPERCLIP_INTERNAL_URL}}|${PAPERCLIP_INTERNAL_URL}|g" \
+    -e "s|{{PAPERCLIP_AGENT_KEY}}|${PAPERCLIP_AGENT_KEY}|g" \
     "$out"
   # Credential ID replacements — proper JSON manipulation (sed can't match
   # across line breaks, and "id"/"name" are on separate lines in the JSON)
@@ -1070,6 +1074,22 @@ if [ "$INSTALL_MODE" = "update" ] && [ "$FORCE_FLAG" != "--force" ] && [ -z "${E
       echo -e "  ⏭️  Skipped — voice messages disabled"
     fi
   fi
+  # Paperclip integration (optional)
+  echo ""
+  read -rp "  🧷 Connect Paperclip agent orchestration? (y/N): " PAPERCLIP_ENABLE
+  if [[ "$PAPERCLIP_ENABLE" =~ ^[Yy]$ ]]; then
+    read -rp "  Paperclip internal URL [http://paperclip:3100]: " PAPERCLIP_INTERNAL_URL_INPUT
+    PAPERCLIP_INTERNAL_URL="${PAPERCLIP_INTERNAL_URL_INPUT:-http://paperclip:3100}"
+    set_env PAPERCLIP_INTERNAL_URL "$PAPERCLIP_INTERNAL_URL"
+    read -rp "  Paperclip Agent API Key: " PAPERCLIP_AGENT_KEY_INPUT
+    if [ -n "$PAPERCLIP_AGENT_KEY_INPUT" ]; then
+      PAPERCLIP_AGENT_KEY="$PAPERCLIP_AGENT_KEY_INPUT"
+      set_env PAPERCLIP_AGENT_KEY "$PAPERCLIP_AGENT_KEY"
+      echo -e "  ${GREEN}✅ Paperclip integration configured${NC}"
+    else
+      echo -e "  ⏭️  Skipped — no API key provided"
+    fi
+  fi
   # Write anthropic key to DB in update mode too
   if [ -n "$ANTHROPIC_API_KEY" ] && [[ "$ANTHROPIC_API_KEY" != "your_"* ]]; then
     LANG=C LC_ALL=C PGPASSWORD=$POSTGRES_PASSWORD psql -h localhost -U postgres -d postgres -c "
@@ -1257,6 +1277,23 @@ if [ -z "$OPENAI_API_KEY" ] || [[ "$OPENAI_API_KEY" == "your_"* ]]; then
 fi
 
 fi # end SKIP_EMBEDDING
+
+# Paperclip integration (optional)
+echo ""
+read -rp "🧷 Connect Paperclip agent orchestration? (y/N): " PAPERCLIP_ENABLE
+if [[ "$PAPERCLIP_ENABLE" =~ ^[Yy]$ ]]; then
+  read -rp "  Paperclip internal URL [http://paperclip:3100]: " PAPERCLIP_INTERNAL_URL_INPUT
+  PAPERCLIP_INTERNAL_URL="${PAPERCLIP_INTERNAL_URL_INPUT:-http://paperclip:3100}"
+  set_env PAPERCLIP_INTERNAL_URL "$PAPERCLIP_INTERNAL_URL"
+  read -rp "  Paperclip Agent API Key: " PAPERCLIP_AGENT_KEY_INPUT
+  if [ -n "$PAPERCLIP_AGENT_KEY_INPUT" ]; then
+    PAPERCLIP_AGENT_KEY="$PAPERCLIP_AGENT_KEY_INPUT"
+    set_env PAPERCLIP_AGENT_KEY "$PAPERCLIP_AGENT_KEY"
+    echo -e "${GREEN}✅ Paperclip integration configured${NC}"
+  else
+    echo -e "⏭️  Skipped — no API key provided"
+  fi
+fi
 
 # Write embedding + anthropic config to DB (tools_config table)
 # Workflows read config from DB at runtime, not from env vars

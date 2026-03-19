@@ -268,6 +268,8 @@ All sensitive values use `{{PLACEHOLDER}}` format. `setup.sh` replaces these at 
 | `{{N8N_API_KEY}}` | n8n API key |
 | `{{TELEGRAM_CHAT_ID}}` | User's Telegram chat ID |
 | `{{WEBHOOK_SECRET}}` | API key for webhook authentication (auto-generated) |
+| `{{PAPERCLIP_INTERNAL_URL}}` | Paperclip API URL (optional, for agent response feedback) |
+| `{{PAPERCLIP_AGENT_KEY}}` | Paperclip Agent API Key (optional) |
 | `REPLACE_WITH_YOUR_CREDENTIAL_ID` | Replaced per credential type after import |
 
 ### Workflow IDs
