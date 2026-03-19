@@ -600,15 +600,29 @@ for f in workflows/*.json; do
     -e "s|{{TELEGRAM_CHAT_ID}}|${TELEGRAM_CHAT_ID}|g" \
     -e "s|{{CREDENTIAL_FORM_WEBHOOK_ID}}|${CREDENTIAL_FORM_WEBHOOK_ID}|g" \
     "$out"
-  # Credential ID replacements — only if IDs are actually set
-  [ -n "$TELEGRAM_CRED_ID" ] && [ "$TELEGRAM_CRED_ID" != "ERR" ] && \
-    sed -i "s|REPLACE_WITH_YOUR_CREDENTIAL_ID\", \"name\": \"Telegram Bot\"|${TELEGRAM_CRED_ID}\", \"name\": \"Telegram Bot\"|g" "$out"
-  [ -n "$POSTGRES_CRED_ID" ] && [ "$POSTGRES_CRED_ID" != "REPLACE_WITH_YOUR_CREDENTIAL_ID" ] && \
-    sed -i "s|REPLACE_WITH_YOUR_CREDENTIAL_ID\", \"name\": \"Supabase Postgres\"|${POSTGRES_CRED_ID}\", \"name\": \"Supabase Postgres\"|g" "$out"
-  [ -n "$OPENAI_CRED_ID" ] && \
-    sed -i "s|REPLACE_WITH_YOUR_OPENAI_CREDENTIAL_ID\", \"name\": \"OpenAI API\"|${OPENAI_CRED_ID}\", \"name\": \"OpenAI API\"|g" "$out"
-  [ -n "$ANTHROPIC_CRED_ID" ] && [ "$ANTHROPIC_CRED_ID" != "REPLACE_WITH_YOUR_CREDENTIAL_ID" ] && \
-    sed -i "s|REPLACE_WITH_YOUR_CREDENTIAL_ID\", \"name\": \"Anthropic API\"|${ANTHROPIC_CRED_ID}\", \"name\": \"Anthropic API\"|g" "$out"
+  # Credential ID replacements — proper JSON manipulation (sed can't match
+  # across line breaks, and "id"/"name" are on separate lines in the JSON)
+  python3 -c "
+import json, sys
+f = sys.argv[1]
+mapping = {}
+if sys.argv[2] and sys.argv[2] not in ('', 'ERR', 'REPLACE_WITH_YOUR_CREDENTIAL_ID'):
+    mapping['telegramApi'] = sys.argv[2]
+if sys.argv[3] and sys.argv[3] not in ('', 'REPLACE_WITH_YOUR_CREDENTIAL_ID'):
+    mapping['postgres'] = sys.argv[3]
+if sys.argv[4] and sys.argv[4] not in ('', 'REPLACE_WITH_YOUR_CREDENTIAL_ID'):
+    mapping['anthropicApi'] = sys.argv[4]
+if sys.argv[5] and sys.argv[5] not in ('',):
+    mapping['openAiApi'] = sys.argv[5]
+with open(f) as fh:
+    wf = json.load(fh)
+for node in wf.get('nodes', []):
+    for cred_type, cred_data in node.get('credentials', {}).items():
+        if cred_type in mapping:
+            cred_data['id'] = mapping[cred_type]
+with open(f, 'w') as fh:
+    json.dump(wf, fh, indent=2, ensure_ascii=False)
+" "$out" "${TELEGRAM_CRED_ID:-}" "${POSTGRES_CRED_ID:-}" "${ANTHROPIC_CRED_ID:-}" "${OPENAI_CRED_ID:-}"
 done
 IMPORT_ORDER="mcp-client reminder-factory reminder-runner mcp-weather-example workflow-builder mcp-builder mcp-library-manager agent-library-manager sub-agent-runner credential-form memory-consolidation background-checker heartbeat n8n-claw-agent"
 
