@@ -557,6 +557,47 @@ fi  # end INSTALL_MODE guard for credentials
 set -e
 rm -f /tmp/pg-cred.json
 
+# ── Paperclip integration (optional, before workflow import) ──
+# Must run before sed replaces {{PAPERCLIP_*}} placeholders in workflows
+if [ "$INSTALL_MODE" != "update" ] || [ "$FORCE_FLAG" = "--force" ]; then
+  # Load existing values from .env (may already be set from previous run)
+  PAPERCLIP_INTERNAL_URL=$(grep '^PAPERCLIP_INTERNAL_URL=' .env 2>/dev/null | cut -d= -f2-)
+  PAPERCLIP_AGENT_KEY=$(grep '^PAPERCLIP_AGENT_KEY=' .env 2>/dev/null | cut -d= -f2-)
+  if [ -n "$PAPERCLIP_INTERNAL_URL" ] && [ -n "$PAPERCLIP_AGENT_KEY" ]; then
+    echo -e "\n${GREEN}🧷 Paperclip: Using existing config (${PAPERCLIP_INTERNAL_URL})${NC}"
+    read -rp "  Reconfigure? (y/N): " PAPERCLIP_RECONFIG
+    if [[ ! "$PAPERCLIP_RECONFIG" =~ ^[Yy]$ ]]; then
+      echo -e "  ${GREEN}✅ Keeping current Paperclip config${NC}"
+    else
+      read -rp "  Paperclip internal URL [${PAPERCLIP_INTERNAL_URL}]: " PAPERCLIP_INTERNAL_URL_INPUT
+      PAPERCLIP_INTERNAL_URL="${PAPERCLIP_INTERNAL_URL_INPUT:-$PAPERCLIP_INTERNAL_URL}"
+      set_env PAPERCLIP_INTERNAL_URL "$PAPERCLIP_INTERNAL_URL"
+      read -rp "  Paperclip Agent API Key: " PAPERCLIP_AGENT_KEY_INPUT
+      if [ -n "$PAPERCLIP_AGENT_KEY_INPUT" ]; then
+        PAPERCLIP_AGENT_KEY="$PAPERCLIP_AGENT_KEY_INPUT"
+        set_env PAPERCLIP_AGENT_KEY "$PAPERCLIP_AGENT_KEY"
+      fi
+      echo -e "  ${GREEN}✅ Paperclip integration updated${NC}"
+    fi
+  else
+    echo ""
+    read -rp "🧷 Connect Paperclip agent orchestration? (y/N): " PAPERCLIP_ENABLE
+    if [[ "$PAPERCLIP_ENABLE" =~ ^[Yy]$ ]]; then
+      read -rp "  Paperclip internal URL [http://paperclip:3100]: " PAPERCLIP_INTERNAL_URL_INPUT
+      PAPERCLIP_INTERNAL_URL="${PAPERCLIP_INTERNAL_URL_INPUT:-http://paperclip:3100}"
+      set_env PAPERCLIP_INTERNAL_URL "$PAPERCLIP_INTERNAL_URL"
+      read -rp "  Paperclip Agent API Key: " PAPERCLIP_AGENT_KEY_INPUT
+      if [ -n "$PAPERCLIP_AGENT_KEY_INPUT" ]; then
+        PAPERCLIP_AGENT_KEY="$PAPERCLIP_AGENT_KEY_INPUT"
+        set_env PAPERCLIP_AGENT_KEY "$PAPERCLIP_AGENT_KEY"
+        echo -e "  ${GREEN}✅ Paperclip integration configured${NC}"
+      else
+        echo -e "  ⏭️  Skipped — no API key provided"
+      fi
+    fi
+  fi
+fi
+
 # ── 11. Prepare + import workflows ──────────────────────────
 
 # Extract credential form webhookId from workflow JSON (used by Library Manager)
@@ -1261,25 +1302,6 @@ if [ -z "$OPENAI_API_KEY" ] || [[ "$OPENAI_API_KEY" == "your_"* ]]; then
 fi
 
 fi # end SKIP_EMBEDDING
-
-# Paperclip integration (optional) — only in fresh install or --force
-if [ "$INSTALL_MODE" != "update" ] || [ "$FORCE_FLAG" = "--force" ]; then
-  echo ""
-  read -rp "🧷 Connect Paperclip agent orchestration? (y/N): " PAPERCLIP_ENABLE
-  if [[ "$PAPERCLIP_ENABLE" =~ ^[Yy]$ ]]; then
-    read -rp "  Paperclip internal URL [http://paperclip:3100]: " PAPERCLIP_INTERNAL_URL_INPUT
-    PAPERCLIP_INTERNAL_URL="${PAPERCLIP_INTERNAL_URL_INPUT:-http://paperclip:3100}"
-    set_env PAPERCLIP_INTERNAL_URL "$PAPERCLIP_INTERNAL_URL"
-    read -rp "  Paperclip Agent API Key: " PAPERCLIP_AGENT_KEY_INPUT
-    if [ -n "$PAPERCLIP_AGENT_KEY_INPUT" ]; then
-      PAPERCLIP_AGENT_KEY="$PAPERCLIP_AGENT_KEY_INPUT"
-      set_env PAPERCLIP_AGENT_KEY "$PAPERCLIP_AGENT_KEY"
-      echo -e "${GREEN}✅ Paperclip integration configured${NC}"
-    else
-      echo -e "⏭️  Skipped — no API key provided"
-    fi
-  fi
-fi
 
 # Write embedding + anthropic config to DB (tools_config table)
 # Workflows read config from DB at runtime, not from env vars
