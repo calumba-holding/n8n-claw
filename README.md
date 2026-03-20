@@ -1,5 +1,5 @@
 <p align="center">
-  <img src="logo-with-text.png" alt="n8n-claw logo" width="200">
+  <img src="social-preview.png" alt="n8n-claw logo" width="600">
 </p>
 
 # n8n-claw — Self-Hosted AI Agent
