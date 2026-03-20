@@ -1,16 +1,44 @@
-# 🤖 n8n-claw — Self-Hosted AI Agent
+# n8n-claw — Self-Hosted AI Agent
 
-A fully self-hosted AI agent built on n8n + PostgreSQL + Claude. Talks to you via Telegram, builds its own MCP tools, manages reminders and memory — all running on your own infrastructure.
+A fully self-hosted AI agent built on n8n + PostgreSQL + Claude. Talks to you via Telegram or HTTP API (Slack, Teams, custom apps), builds its own MCP tools, manages reminders and memory — all running on your own infrastructure.
 
 **Short Introduction**
 
 https://github.com/user-attachments/assets/10b7b93d-f482-47c1-a144-80a1b9d1be16
+
+## Contents
+
+- [What it does](#what-it-does)
+- [Architecture](#architecture)
+- [Installation](#installation)
+- [Services & URLs](#services--urls)
+- [Webhook API & External Integrations](#webhook-api--external-integrations)
+- [MCP Skills Library](#mcp-skills-library)
+- [Expert Agents](#expert-agents)
+- [Building custom MCP Skills](#building-custom-mcp-skills)
+- [Memory](#memory)
+- [Project Memory](#project-memory)
+- [Task Management](#task-management)
+- [Reminders & Scheduled Actions](#reminders--scheduled-actions)
+- [Media Support](#media-support)
+- [Heartbeat & Scheduled Actions](#heartbeat--scheduled-actions-1)
+- [Customization](#customization)
+- [Alternative LLM Providers](#alternative-llm-providers)
+- [Switching from Telegram to WhatsApp](#switching-from-telegram-to-whatsapp)
+- [HTTPS Setup](#https-setup)
+- [Updating](#updating)
+- [Troubleshooting](#troubleshooting)
+- [WorkflowBuilder with Claude Code](#optional-workflowbuilder-with-claude-code)
+- [Stack](#stack)
+
+---
 
 ## What it does
 
 Talk to your agent in natural language — it manages tasks, remembers context across conversations, builds API integrations, and proactively keeps you on track.
 
 - **Telegram chat** — talk to your AI agent directly via Telegram
+- **Webhook API** — call the agent from any external system via HTTP (Slack, Teams, Paperclip, custom apps)
 - **Long-term memory** — remembers conversations and important context with optional semantic search (RAG)
 - **Task management** — create, track, and complete tasks with priorities and due dates
 - **Proactive heartbeat** — automatically reminds you of overdue/urgent tasks
@@ -28,8 +56,10 @@ Talk to your agent in natural language — it manages tasks, remembers context a
 ## Architecture
 
 ```
-Telegram
-  ↓
+Telegram  ───────────────────────────────────┐
+Webhook API (POST /webhook/agent)  ───────┐
+  │                                     │
+  └─────────────────▼─────────────────────┘
 n8n-claw Agent (Claude Sonnet)
   ├── Task Manager        — create, track, complete tasks
   ├── Project Manager     — persistent project notes (markdown)
@@ -45,6 +75,15 @@ n8n-claw Agent (Claude Sonnet)
   ├── Web Search          — search the web (SearXNG)
   ├── Web Reader          — read webpages as markdown (Crawl4AI)
   └── Self Modify         — inspect/list n8n workflows
+  │
+  ├── Webhook caller? → JSON response to HTTP caller
+  └── Telegram?      → Telegram Reply
+
+Webhook Adapter (optional, connects external systems):
+  💬 Slack Trigger     ──┐
+  💬 Teams Trigger     ──┤
+  🌐 Generic Webhook   ──┼── Map Input → POST /webhook/agent → Route Response
+  🛠️ Custom Webhook    ──┘   (Set node — easy to customize, no code)
 
 Background Workflows (automated):
   💓 Heartbeat              — every 5 min: recurring actions + proactive reminders
@@ -111,20 +150,21 @@ The easiest way is to open each workflow and click **"Create new credential"** d
 | Anthropic API | `Anthropic API` | Agent (Claude node), MCP Builder, Sub-Agent Runner |
 | Telegram Bot | `Telegram Bot` | Agent (Telegram Trigger + Reply) — *created automatically by setup* |
 | OpenAI API | `OpenAI API` | Agent (Voice transcription via Whisper) — *optional, created by setup if key provided* |
+| Webhook Auth | `Webhook Auth` | Agent + Adapter (Webhook Triggers) — *created automatically by setup* |
 
-**⚠️ After fresh install — connect credentials in these workflows:**
+**After fresh install — connect credentials in these workflows:**
 
 | Workflow | Credentials to connect |
 |---|---|
-| 🤖 n8n-claw Agent | Postgres, Anthropic API, OpenAI API (optional) |
-| 🏗️ MCP Builder | Anthropic API (select on LLM node) |
-| 🧠 Sub-Agent Runner | Postgres, Anthropic API |
+| n8n-claw Agent | Postgres, Anthropic API, OpenAI API (optional) |
+| MCP Builder | Anthropic API (select on LLM node) |
+| Sub-Agent Runner | Postgres, Anthropic API |
 
-**⚠️ After update (`./setup.sh`)** — credentials persist in the Agent and MCP Builder, but must be re-selected in:
+**After update (`./setup.sh`)** — credentials persist in the Agent and MCP Builder, but must be re-selected in:
 
 | Workflow | Credentials to re-connect |
 |---|---|
-| 🧠 Sub-Agent Runner | Postgres, Anthropic API |
+| Sub-Agent Runner | Postgres, Anthropic API |
 
 **Postgres connection details** *(shown in setup output)*:
 - Host: `db` | Port: `5432` | DB: `postgres` | User: `postgres`
@@ -151,38 +191,55 @@ These workflows are **activated automatically** by setup — no action needed:
 
 | Workflow | Purpose |
 |---|---|
-| 🤖 n8n-claw Agent | Main agent — receives Telegram messages, calls tools |
-| 💓 Heartbeat | Background: recurring actions + proactive reminders (every 5 min) |
-| 🔍 Background Checker | Sub-workflow: silent background checks, only notifies on changes |
-| 🧠 Memory Consolidation | Background: summarizes conversations into long-term memory (daily 3am) |
-| ⏰ Reminder Runner | Background: delivers reminders + triggers one-time actions (every 1 min) |
+| n8n-claw Agent | Main agent — receives Telegram + Webhook messages, calls tools |
+| Heartbeat | Background: recurring actions + proactive reminders (every 5 min) |
+| Background Checker | Sub-workflow: silent background checks, only notifies on changes |
+| Memory Consolidation | Background: summarizes conversations into long-term memory (daily 3am) |
+| Reminder Runner | Background: delivers reminders + triggers one-time actions (every 1 min) |
 
 These workflows need to be **activated manually** in n8n UI:
 
 | Workflow | Purpose |
 |---|---|
-| 🏗️ MCP Builder | Builds custom MCP skills on demand |
-| 🌤️ MCP: Weather | Example MCP Server — weather via Open-Meteo (no API key) |
-| ⚙️ WorkflowBuilder | Builds general n8n automations *(optional — requires [extra setup](#optional-workflowbuilder-with-claude-code))* |
+| MCP Builder | Builds custom MCP skills on demand |
+| MCP: Weather | Example MCP Server — weather via Open-Meteo (no API key) |
+| WorkflowBuilder | Builds general n8n automations *(optional — requires [extra setup](#optional-workflowbuilder-with-claude-code))* |
 
 Sub-workflows (called by other workflows, no manual activation needed):
 
 | Workflow | Called by |
 |---|---|
-| 🔌 MCP Client | Agent — calls tools on MCP skill servers |
-| 📚 MCP Library Manager | Agent — installs/removes skills from catalog |
-| 🧠 Sub-Agent Runner | Agent — runs expert agents with loaded personas |
-| 📖 Agent Library Manager | Agent — installs/removes expert agents |
-| ⏰ ReminderFactory | Agent — saves reminders/tasks to database |
-| 🔐 credential-form | Library Manager — secure form for entering API keys |
+| MCP Client | Agent — calls tools on MCP skill servers |
+| MCP Library Manager | Agent — installs/removes skills from catalog |
+| Sub-Agent Runner | Agent — runs expert agents with loaded personas |
+| Agent Library Manager | Agent — installs/removes expert agents |
+| ReminderFactory | Agent — saves reminders/tasks to database |
+| credential-form | Library Manager — secure form for entering API keys |
+| Webhook Adapter | Connects Slack, Teams, and custom apps to the agent (imported inactive) |
 
 ### Step 4 — Start chatting
 
 Send a message to your Telegram bot. It's ready!
 
+You can also test the webhook API:
+
+```bash
+curl -X POST https://YOUR-DOMAIN/webhook/agent \
+  -H "Content-Type: application/json" \
+  -H "X-API-Key: YOUR_WEBHOOK_SECRET" \
+  -d '{"message": "Hello!", "user_id": "test-user"}'
+```
+
+The `WEBHOOK_SECRET` is shown at the end of setup output (also in `.env`).
+
 ---
 
+<details>
+<summary>
+
 ## Services & URLs
+
+</summary>
 
 After setup, these services run:
 
@@ -190,6 +247,9 @@ After setup, these services run:
 |---|---|---|
 | n8n | `http://YOUR-IP:5678` | Workflow editor |
 | Supabase Studio | `http://localhost:3001` (via SSH tunnel) | Database admin UI |
+| Webhook API | `https://YOUR-DOMAIN/webhook/agent` | Agent HTTP endpoint (POST, requires X-API-Key header) |
+| Webhook Adapter | `https://YOUR-DOMAIN/webhook/adapter` | Multi-system adapter endpoint (POST) |
+| Custom Webhook | `https://YOUR-DOMAIN/webhook/custom` | Easy-to-customize adapter (Set node, no code) |
 | PostgREST API | `http://kong:8000` (Docker-internal only) | REST API for PostgreSQL |
 
 ### Accessing Supabase Studio
@@ -202,9 +262,161 @@ ssh -L 3001:localhost:3001 user@YOUR-VPS-IP
 
 Then open `http://localhost:3001` in your browser. The tunnel stays open as long as the SSH session runs.
 
+</details>
+
 ---
 
+<details>
+<summary>
+
+## Webhook API & External Integrations
+
+</summary>
+
+n8n-claw exposes an HTTP API so external systems can talk to the agent — no Telegram required.
+
+### Direct Webhook API
+
+Any system that can make HTTP requests can call the agent directly:
+
+```
+POST {{N8N_URL}}/webhook/agent
+Header: X-API-Key: {{WEBHOOK_SECRET}}
+Content-Type: application/json
+
+{
+  "message": "What is the weather in Berlin?",
+  "user_id": "my-app-user-123",
+  "session_id": "my-app:conv-456",
+  "source": "my-app",
+  "metadata": { "any": "data you want back" }
+}
+```
+
+**Response (200):**
+
+```json
+{
+  "success": true,
+  "response": "The weather in Berlin is...",
+  "session_id": "my-app:conv-456",
+  "source": "my-app",
+  "metadata": { "any": "data you want back" }
+}
+```
+
+| Field | Required | Default | Description |
+|---|---|---|---|
+| `message` | yes | — | The user's message |
+| `user_id` | yes | — | Unique user identifier |
+| `session_id` | no | `api:{user_id}` | Conversation session ID (for history) |
+| `source` | no | `api` | Source identifier (appears in logs) |
+| `metadata` | no | `{}` | Arbitrary data — round-trips back in the response |
+
+The agent uses `session_id` and `user_id` (with source prefix) for conversation history and user profiles — same as Telegram, just with different prefixes.
+
+### Webhook Adapter (Slack, Teams, Paperclip)
+
+For systems that need input/output mapping (different message formats, response routing), use the **Webhook Adapter** workflow. It translates between external formats and the agent's webhook API.
+
+The adapter ships with four triggers:
+
+| Trigger | Endpoint | Default state | Use case |
+|---|---|---|---|
+| **Generic Webhook** | `/webhook/adapter` | Active | Paperclip, API power-users (Code node with fallback chains) |
+| **Custom Webhook** | `/webhook/custom` | Active | Your own apps — simple Set node, easy to customize without code |
+| **Slack Trigger** | — | Disabled | Slack workspace integration |
+| **Teams Trigger** | — | Disabled | Microsoft Teams integration |
+
+Each trigger has a mapper node that normalizes messages → calls `/webhook/agent` → routes the response back to the right system via `metadata._responseChannel`. Paperclip payloads are auto-detected and get a dedicated response branch that posts the agent's answer as a comment and marks the issue as done.
+
+### Enabling Slack
+
+1. **Create a Slack App** at [api.slack.com/apps](https://api.slack.com/apps)
+2. **Add Bot Token Scopes** under OAuth & Permissions: `chat:write`, `channels:history`, `channels:read`
+3. **Install to workspace** and copy the Bot Token (`xoxb-...`)
+4. **In n8n**: Create a Slack API credential (Bot Token + Signing Secret)
+5. **Enable the Slack Trigger + Slack Reply** nodes in the Webhook Adapter workflow
+6. **Activate the Webhook Adapter** workflow
+7. **In Slack App settings**: Add the Slack Trigger's webhook URL under Event Subscriptions
+8. **Subscribe to bot events**: `message.channels` (public channels), `message.im` (direct messages)
+9. **Invite the bot** to your Slack channel (`/invite @YourBotName`)
+
+> The Slack Trigger webhook URL changes when the adapter workflow is re-created (e.g. `setup.sh --force`). Update the Event Subscriptions URL in your Slack App after each reinstall.
+
+### Enabling Teams
+
+1. **Register a Bot** in [Azure Portal](https://portal.azure.com) (Bot Framework)
+2. **Create App ID + Client Secret**
+3. **Set Messaging Endpoint** to the Teams Trigger's webhook URL
+4. **In n8n**: Create a Microsoft Teams OAuth2 credential
+5. **Enable the Teams Trigger + Teams Reply** nodes in the Webhook Adapter workflow
+6. **Activate the Webhook Adapter** workflow
+
+### Enabling Paperclip
+
+[Paperclip](https://github.com/paperclipai/paperclip) is an open-source agent orchestration platform. n8n-claw works as a Paperclip agent out of the box — no extra configuration in n8n needed.
+
+The adapter auto-detects Paperclip's payload format (`runId` + `context`), fetches the issue title and description via the Paperclip API, and after the agent responds:
+- Posts the response as a **comment** on the Paperclip issue
+- Sets the issue status to **done**
+
+**Setup in Paperclip:**
+
+1. **Deploy Paperclip** on the same server or network as n8n-claw
+2. **Create a Company** and an **Agent** with `http` adapter type
+3. **Configure the agent's HTTP adapter:**
+   ```json
+   {
+     "url": "https://YOUR-DOMAIN/webhook/adapter",
+     "method": "POST",
+     "headers": {
+       "X-API-Key": "YOUR_WEBHOOK_SECRET"
+     },
+     "payloadTemplate": {
+       "source": "paperclip"
+     }
+   }
+   ```
+4. **Generate an Agent API Key** in Paperclip (used by n8n-claw to post comments back)
+5. **Add placeholders to `.env`** (or hardcode in the workflow):
+   - `PAPERCLIP_INTERNAL_URL` — Paperclip's internal URL (e.g. `http://paperclip:3100` if on same Docker network)
+   - `PAPERCLIP_AGENT_KEY` — the agent API key from step 4
+6. **Create an issue** in Paperclip and assign it to the agent — the heartbeat will trigger the workflow automatically
+
+> **Docker networking:** If Paperclip runs on the same server, connect it to n8n-claw's Docker network (`n8n-claw_n8n-claw-net`) and use the container DNS name (`paperclip:3100`) instead of `localhost`.
+
+### Adding a Custom Integration
+
+**Easiest way — use the Custom Webhook (no code):**
+
+1. Open the **Map Custom Input** Set node in the Webhook Adapter workflow
+2. Adjust the field mappings to match your app's JSON structure:
+   - `message` → the field containing the user's text (e.g. `$json.body.text`)
+   - `user_id` → the sender identifier (e.g. `$json.body.username`)
+   - `session_id` → unique conversation ID
+   - `source` → your app's name
+3. Send a POST to `/webhook/custom` with `X-API-Key` header
+
+**Advanced — add a new trigger (for systems with custom response routing):**
+
+1. Add a new **Trigger node** in the Webhook Adapter workflow
+2. Add a new **Map node** (Code node) that outputs: `{ message, user_id, session_id, source, metadata: { _responseChannel: "your-system" } }`
+3. Add a matching output in the **Route Response** switch node
+4. Add a **Reply node** for your system
+
+The `_responseChannel` value in metadata tells the adapter where to route the agent's response.
+
+</details>
+
+---
+
+<details>
+<summary>
+
 ## MCP Skills Library
+
+</summary>
 
 Install pre-built skills from the [skill catalog](https://github.com/freddy-schuetz/n8n-claw-templates) — no coding required. Just ask your agent:
 
@@ -214,7 +426,7 @@ Install pre-built skills from the [skill catalog](https://github.com/freddy-schu
 
 The Library Manager fetches skill templates from GitHub, imports the workflows into n8n, and registers the new MCP server automatically.
 
-> ⚠️ After installing a skill: **deactivate → reactivate** the new MCP workflow in n8n UI (required due to a webhook registration bug in n8n).
+> After installing a skill: **deactivate → reactivate** the new MCP workflow in n8n UI (required due to a webhook registration bug in n8n).
 
 **Skills with API keys:** Some skills require an API key (e.g. NewsAPI). When you install one, the agent sends you a secure one-time link via Telegram. Click it, enter your key — done. The key is stored in the database and the skill reads it at runtime. Links expire after 10 minutes and can only be used once.
 
@@ -227,7 +439,7 @@ You can also regenerate a credential link later:
 
 Want to create your own skills? See the [template contribution guide](https://github.com/freddy-schuetz/n8n-claw-templates#creating-a-template).
 
-> **⚠️ Security notice — Skill credentials are stored in plain text**
+> **Security notice — Skill credentials are stored in plain text**
 >
 > API keys entered via the credential form are currently stored **unencrypted** in the `template_credentials` table in PostgreSQL. This means:
 >
@@ -241,9 +453,16 @@ Want to create your own skills? See the [template contribution guide](https://gi
 >
 > Encryption at rest for skill credentials is planned and in progress.
 
+</details>
+
 ---
 
+<details>
+<summary>
+
 ## Expert Agents
+
+</summary>
 
 Delegate complex tasks to specialized sub-agents. Each expert has its own AI agent with a focused persona, tools (web search, HTTP requests, web reader, MCP), and works independently — then the main agent rephrases the result in its own tone.
 
@@ -251,9 +470,9 @@ Delegate complex tasks to specialized sub-agents. Each expert has its own AI age
 
 | Agent | Speciality |
 |---|---|
-| 🔍 Research Expert | Web research, fact-checking, source evaluation, structured summaries |
-| ✍️ Content Creator | Copywriting, social media posts, blog articles, marketing copy |
-| 📊 Data Analyst | Data analysis, pattern recognition, KPI interpretation, structured reports |
+| Research Expert | Web research, fact-checking, source evaluation, structured summaries |
+| Content Creator | Copywriting, social media posts, blog articles, marketing copy |
+| Data Analyst | Data analysis, pattern recognition, KPI interpretation, structured reports |
 
 **Using expert agents:**
 
@@ -274,11 +493,18 @@ The agent automatically picks the right expert based on your request — or you 
 
 Install more experts from the [agent catalog](https://github.com/freddy-schuetz/n8n-claw-agents) or ask the community to contribute new ones.
 
-**Status updates:** During long-running expert tasks, the agent sends you Telegram progress updates so you know what's happening (e.g. "🔍 Starting research expert...").
+**Status updates:** During long-running expert tasks, the agent sends you Telegram progress updates so you know what's happening (e.g. "Starting research expert...").
+
+</details>
 
 ---
 
+<details>
+<summary>
+
 ## Building custom MCP Skills
+
+</summary>
 
 For APIs not covered by the skill catalog, ask your agent to build one from scratch:
 
@@ -291,11 +517,18 @@ The MCP Builder will:
 4. Register the server in the database
 5. Update the agent so it knows about the new tool
 
-> ⚠️ After each MCP build: **deactivate → reactivate** the new MCP workflow in n8n UI (same webhook bug as skill install).
+> After each MCP build: **deactivate → reactivate** the new MCP workflow in n8n UI (same webhook bug as skill install).
+
+</details>
 
 ---
 
+<details>
+<summary>
+
 ## Memory
+
+</summary>
 
 The agent has a multi-layered memory system — it remembers things you tell it and learns from your conversations over time.
 
@@ -313,9 +546,16 @@ The agent has a multi-layered memory system — it remembers things you tell it 
 
 **Memory Consolidation** runs automatically every night at 3am. It summarizes the day's conversations into concise long-term memories with vector embeddings. This keeps the memory efficient and searchable. Requires an embedding API key (OpenAI, Voyage AI, or Ollama — configured during setup).
 
+</details>
+
 ---
 
+<details>
+<summary>
+
 ## Project Memory
+
+</summary>
 
 Track ongoing work across multiple conversations with persistent project documents. Each project is a markdown file the agent creates, reads, and updates on demand — like a living notebook for each topic you're working on.
 
@@ -342,9 +582,16 @@ The agent reads the current document, adds your notes, and saves the updated ver
 
 Sets the project status to `completed` — it disappears from the active list but stays in the database.
 
+</details>
+
 ---
 
+<details>
+<summary>
+
 ## Task Management
+
+</summary>
 
 The agent can manage tasks for you — just tell it what you need in natural language.
 
@@ -365,9 +612,16 @@ The agent can manage tasks for you — just tell it what you need in natural lan
 
 Tasks support priorities (`low`, `medium`, `high`, `urgent`), due dates, and subtasks.
 
+</details>
+
 ---
 
+<details>
+<summary>
+
 ## Reminders & Scheduled Actions
+
+</summary>
 
 The agent supports three types of timed actions:
 
@@ -396,9 +650,16 @@ Recurring actions are managed via natural language — list, pause, resume, or d
 
 Reminders and one-time scheduled actions are delivered by the **Reminder Runner** (polls every minute). Recurring actions are executed by the **Heartbeat** (runs every 5 minutes). Missed reminders are automatically delivered on the next run.
 
+</details>
+
 ---
 
+<details>
+<summary>
+
 ## Media Support
+
+</summary>
 
 The agent understands more than just text — send voice messages, photos, documents, or locations directly in Telegram.
 
@@ -416,9 +677,16 @@ The agent understands more than just text — send voice messages, photos, docum
 > *[send a PDF]* — text extracted and analyzed by the agent
 > *[share location]* — agent responds with location context
 
+</details>
+
 ---
 
+<details>
+<summary>
+
 ## Heartbeat & Scheduled Actions
+
+</summary>
 
 The Heartbeat is a background workflow that runs every 5 minutes. It executes recurring scheduled actions and delivers proactive reminders.
 
@@ -460,9 +728,16 @@ The Heartbeat also checks for overdue or urgent tasks and sends you a short Tele
 
 Rate-limited to one message every 2 hours (configurable) — no spam.
 
+</details>
+
 ---
 
+<details>
+<summary>
+
 ## Customization
+
+</summary>
 
 Edit the `soul` and `agents` tables directly in Supabase Studio (`http://localhost:3001` via [SSH tunnel](#accessing-supabase-studio)) to change your agent's personality, tools, and behavior — no code changes needed.
 
@@ -484,9 +759,16 @@ Edit the `soul` and `agents` tables directly in Supabase Studio (`http://localho
 | `memory_long` | Long-term memory with vector embeddings (semantic search) |
 | `memory_daily` | Daily interaction log (used by Memory Consolidation) |
 
+</details>
+
 ---
 
+<details>
+<summary>
+
 ## Alternative LLM Providers
+
+</summary>
 
 n8n-claw is built for Claude (Anthropic) but works with **any OpenAI-compatible LLM** — including llama.cpp, Ollama, LM Studio, vLLM, OpenRouter, or any provider that exposes an OpenAI-compatible API endpoint.
 
@@ -496,9 +778,9 @@ Replace the Anthropic LLM node in these workflows with an **OpenAI Chat Model** 
 
 | Workflow | Node to replace | Default model |
 |---|---|---|
-| 🤖 n8n-claw Agent | "Claude" (LLM sub-node) | Claude Sonnet |
-| 🏗️ MCP Builder | "Anthropic Chat Model" (2 nodes) | Claude Opus |
-| 🧠 Sub-Agent Runner | "Claude" (LLM sub-node) | Claude Sonnet |
+| n8n-claw Agent | "Claude" (LLM sub-node) | Claude Sonnet |
+| MCP Builder | "Anthropic Chat Model" (2 nodes) | Claude Opus |
+| Sub-Agent Runner | "Claude" (LLM sub-node) | Claude Sonnet |
 
 **Steps:**
 
@@ -522,14 +804,21 @@ Replace the Anthropic LLM node in these workflows with an **OpenAI Chat Model** 
 
 | Provider | Status | Notes |
 |---|---|---|
-| llama.cpp (qwen-coder-next) | ✅ Working | Reported by community ([Discussion #6](https://github.com/freddy-schuetz/n8n-claw/discussions/6)) — text + MCP weather confirmed |
-| Ollama | ✅ Expected to work | OpenAI-compatible endpoint at `localhost:11434/v1` |
+| llama.cpp (qwen-coder-next) | Working | Reported by community ([Discussion #6](https://github.com/freddy-schuetz/n8n-claw/discussions/6)) — text + MCP weather confirmed |
+| Ollama | Expected to work | OpenAI-compatible endpoint at `localhost:11434/v1` |
 
 > Tested a different provider? Let us know in [Discussions](https://github.com/freddy-schuetz/n8n-claw/discussions)!
 
+</details>
+
 ---
 
+<details>
+<summary>
+
 ## Switching from Telegram to WhatsApp
+
+</summary>
 
 n8n-claw uses Telegram by default, but you can switch to WhatsApp by replacing the Telegram nodes in the n8n UI. This requires changes in 3 workflows across 8 nodes — no code outside of n8n needed.
 
@@ -560,7 +849,7 @@ The two platforms use different JSON structures. Here's how the fields map:
 
 ### Nodes to replace
 
-#### 🤖 n8n-claw Agent (6 nodes)
+#### n8n-claw Agent (6 nodes)
 
 | Current node | Purpose | Replace with |
 |---|---|---|
@@ -571,13 +860,13 @@ The two platforms use different JSON structures. Here's how the fields map:
 | **Get Photo File** | Downloads photos for vision analysis | **HTTP Request** node calling WhatsApp's media download endpoint |
 | **Get Doc File** | Downloads documents for text extraction | **HTTP Request** node calling WhatsApp's media download endpoint |
 
-#### 💓 Heartbeat (1 node)
+#### Heartbeat (1 node)
 
 | Current node | Purpose | Replace with |
 |---|---|---|
 | **Send Telegram** | Sends proactive reminders + morning briefing | **WhatsApp → Send Message** — update `chatId` parameter to use phone number |
 
-#### ⏰ Reminder Runner (1 node)
+#### Reminder Runner (1 node)
 
 | Current node | Purpose | Replace with |
 |---|---|---|
@@ -629,9 +918,16 @@ The existing voice transcription (Whisper) and photo analysis (GPT-4o Vision) no
 
 > This is an advanced customization. If you run into issues, ask in [Discussions](https://github.com/freddy-schuetz/n8n-claw/discussions).
 
+</details>
+
 ---
 
+<details>
+<summary>
+
 ## HTTPS Setup
+
+</summary>
 
 If you provided a domain during setup, HTTPS is configured automatically via Let's Encrypt + nginx. This is the default and works for most people. If not, you can add it later:
 
@@ -653,7 +949,7 @@ SKIP_REVERSE_PROXY=true
 
 Your reverse proxy should forward traffic to `localhost:5678` (n8n) with WebSocket support enabled.
 
-> **⚠️ Known issue:** When you enter a domain and skip nginx, setup sets `N8N_URL=https://your-domain` in `.env`. It then tries to reach the n8n API via that HTTPS URL — but if your reverse proxy isn't forwarding traffic to n8n yet, the "Waiting for n8n API..." step will fail and the script exits.
+> **Known issue:** When you enter a domain and skip nginx, setup sets `N8N_URL=https://your-domain` in `.env`. It then tries to reach the n8n API via that HTTPS URL — but if your reverse proxy isn't forwarding traffic to n8n yet, the "Waiting for n8n API..." step will fail and the script exits.
 >
 > **Workaround:**
 > 1. Open `.env` and delete the `N8N_URL` line
@@ -663,11 +959,18 @@ Your reverse proxy should forward traffic to `localhost:5678` (n8n) with WebSock
 >
 > Make sure your reverse proxy forwards HTTPS traffic to `localhost:5678` before using the agent.
 
-> ⚠️ **Security note:** Without a domain, n8n runs over plain HTTP with no TLS and no rate limiting. This is fine for **local installs** (home server, LAN, testing). For a **public VPS**, always use a domain with HTTPS — otherwise credentials are transmitted unencrypted and the instance is exposed to the internet.
+> **Security note:** Without a domain, n8n runs over plain HTTP with no TLS and no rate limiting. This is fine for **local installs** (home server, LAN, testing). For a **public VPS**, always use a domain with HTTPS — otherwise credentials are transmitted unencrypted and the instance is exposed to the internet.
+
+</details>
 
 ---
 
+<details>
+<summary>
+
 ## Updating
+
+</summary>
 
 **Normal update** — pulls code + Docker images, restarts services. Your personality, credentials, and data are preserved:
 
@@ -683,9 +986,16 @@ cd n8n-claw && ./setup.sh
 
 Use `--force` when you want to change your agent's name, language, communication style, or switch between proactive/reactive mode.
 
+</details>
+
 ---
 
+<details>
+<summary>
+
 ## Troubleshooting
+
+</summary>
 
 **Agent not responding to Telegram messages?**
 → Check all workflows are **activated** in n8n UI
@@ -715,9 +1025,16 @@ docker logs n8n-claw-db     # PostgreSQL
 docker logs n8n-claw-rest   # PostgREST
 ```
 
+</details>
+
 ---
 
+<details>
+<summary>
+
 ## Optional: WorkflowBuilder with Claude Code
+
+</summary>
 
 The WorkflowBuilder tool lets your agent build complex n8n workflows using Claude Code CLI. This requires additional setup:
 
@@ -756,6 +1073,8 @@ claude --version
 Then restart: `docker compose up -d n8n`
 
 > Without this setup, the WorkflowBuilder tool won't function — but all other agent capabilities work fine without it.
+
+</details>
 
 ---
 

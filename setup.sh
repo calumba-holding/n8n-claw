@@ -154,6 +154,12 @@ if [ -z "$SUPABASE_JWT_SECRET" ]; then
   set_env "SUPABASE_JWT_SECRET" "$SUPABASE_JWT_SECRET"
 fi
 
+# Webhook API secret for external integrations
+if [ -z "$WEBHOOK_SECRET" ]; then
+  WEBHOOK_SECRET=$(openssl rand -hex 32)
+  set_env "WEBHOOK_SECRET" "$WEBHOOK_SECRET"
+fi
+
 # SearXNG secret key (only patch if placeholder still present)
 if grep -q '{{SEARXNG_SECRET_KEY}}' searxng/settings.yml 2>/dev/null; then
   SEARXNG_SECRET=$(openssl rand -hex 32)
@@ -471,6 +477,18 @@ creds=json.load(sys.stdin).get('data',[])
 for c in creds:
     if c.get('type')=='anthropicApi': print(c['id']); break
 " 2>/dev/null)
+EXISTING_HEADERAUTH_ID=$(echo "$EXISTING_CREDS" | python3 -c "
+import sys,json
+creds=json.load(sys.stdin).get('data',[])
+for c in creds:
+    if c.get('type')=='httpHeaderAuth': print(c['id']); break
+" 2>/dev/null)
+EXISTING_SLACK_ID=$(echo "$EXISTING_CREDS" | python3 -c "
+import sys,json
+creds=json.load(sys.stdin).get('data',[])
+for c in creds:
+    if c.get('type')=='slackApi': print(c['id']); break
+" 2>/dev/null)
 if [ -n "$EXISTING_ANTHROPIC_ID" ]; then
   ANTHROPIC_CRED_ID="$EXISTING_ANTHROPIC_ID"
   echo "  ✅ Anthropic API → ${ANTHROPIC_CRED_ID} (existing)"
@@ -525,9 +543,60 @@ else
   echo -e "  ${YELLOW}ℹ️  OpenAI API Key not set — voice transcription disabled${NC}"
 fi
 
+# Webhook Auth credential (for webhook API authentication)
+HEADERAUTH_CRED_ID=""
+if [ -n "$EXISTING_HEADERAUTH_ID" ]; then
+  HEADERAUTH_CRED_ID="$EXISTING_HEADERAUTH_ID"
+  echo "  ✅ Webhook Auth → ${HEADERAUTH_CRED_ID} (existing)"
+else
+  HEADERAUTH_CRED_ID=$(create_cred "Webhook Auth" "httpHeaderAuth" "{\"name\":\"X-API-Key\",\"value\":\"${WEBHOOK_SECRET}\"}")
+  [ -z "$HEADERAUTH_CRED_ID" ] && echo -e "  ${YELLOW}⚠️  Webhook Auth credential failed — create manually in n8n UI${NC}" || echo "  ✅ Webhook Auth → ${HEADERAUTH_CRED_ID} (created)"
+fi
+
 fi  # end INSTALL_MODE guard for credentials
 set -e
 rm -f /tmp/pg-cred.json
+
+# ── Paperclip integration (optional, before workflow import) ──
+# Must run before sed replaces {{PAPERCLIP_*}} placeholders in workflows
+if [ "$INSTALL_MODE" != "update" ] || [ "$FORCE_FLAG" = "--force" ]; then
+  # Load existing values from .env (may already be set from previous run)
+  PAPERCLIP_INTERNAL_URL=$(grep '^PAPERCLIP_INTERNAL_URL=' .env 2>/dev/null | cut -d= -f2-)
+  PAPERCLIP_AGENT_KEY=$(grep '^PAPERCLIP_AGENT_KEY=' .env 2>/dev/null | cut -d= -f2-)
+  if [ -n "$PAPERCLIP_INTERNAL_URL" ] && [ -n "$PAPERCLIP_AGENT_KEY" ]; then
+    echo -e "\n${GREEN}🧷 Paperclip: Using existing config (${PAPERCLIP_INTERNAL_URL})${NC}"
+    read -rp "  Reconfigure? (y/N): " PAPERCLIP_RECONFIG
+    if [[ ! "$PAPERCLIP_RECONFIG" =~ ^[Yy]$ ]]; then
+      echo -e "  ${GREEN}✅ Keeping current Paperclip config${NC}"
+    else
+      read -rp "  Paperclip internal URL [${PAPERCLIP_INTERNAL_URL}]: " PAPERCLIP_INTERNAL_URL_INPUT
+      PAPERCLIP_INTERNAL_URL="${PAPERCLIP_INTERNAL_URL_INPUT:-$PAPERCLIP_INTERNAL_URL}"
+      set_env PAPERCLIP_INTERNAL_URL "$PAPERCLIP_INTERNAL_URL"
+      read -rp "  Paperclip Agent API Key: " PAPERCLIP_AGENT_KEY_INPUT
+      if [ -n "$PAPERCLIP_AGENT_KEY_INPUT" ]; then
+        PAPERCLIP_AGENT_KEY="$PAPERCLIP_AGENT_KEY_INPUT"
+        set_env PAPERCLIP_AGENT_KEY "$PAPERCLIP_AGENT_KEY"
+      fi
+      echo -e "  ${GREEN}✅ Paperclip integration updated${NC}"
+    fi
+  else
+    echo ""
+    read -rp "🧷 Connect Paperclip agent orchestration? (y/N): " PAPERCLIP_ENABLE
+    if [[ "$PAPERCLIP_ENABLE" =~ ^[Yy]$ ]]; then
+      read -rp "  Paperclip internal URL [http://paperclip:3100]: " PAPERCLIP_INTERNAL_URL_INPUT
+      PAPERCLIP_INTERNAL_URL="${PAPERCLIP_INTERNAL_URL_INPUT:-http://paperclip:3100}"
+      set_env PAPERCLIP_INTERNAL_URL "$PAPERCLIP_INTERNAL_URL"
+      read -rp "  Paperclip Agent API Key: " PAPERCLIP_AGENT_KEY_INPUT
+      if [ -n "$PAPERCLIP_AGENT_KEY_INPUT" ]; then
+        PAPERCLIP_AGENT_KEY="$PAPERCLIP_AGENT_KEY_INPUT"
+        set_env PAPERCLIP_AGENT_KEY "$PAPERCLIP_AGENT_KEY"
+        echo -e "  ${GREEN}✅ Paperclip integration configured${NC}"
+      else
+        echo -e "  ⏭️  Skipped — no API key provided"
+      fi
+    fi
+  fi
+fi
 
 # ── 11. Prepare + import workflows ──────────────────────────
 
@@ -556,7 +625,7 @@ for wf in data.get('data', []):
     print(wf['name'])
 " 2>/dev/null)
 
-  for f in workflows/*.json; do
+  for f in workflows/*.json workflows/adapters/*.json; do
     [ -f "$f" ] || continue
     wf_name=$(python3 -c "import json; print(json.load(open('$f')).get('name','?'))" 2>/dev/null)
 
@@ -578,7 +647,42 @@ for wf in data.get('data', []):
       -e "s|{{SUPABASE_ANON_KEY}}|${SUPABASE_ANON_KEY}|g" \
       -e "s|{{TELEGRAM_CHAT_ID}}|${TELEGRAM_CHAT_ID}|g" \
       -e "s|{{CREDENTIAL_FORM_WEBHOOK_ID}}|${CREDENTIAL_FORM_WEBHOOK_ID}|g" \
+      -e "s|{{WEBHOOK_SECRET}}|${WEBHOOK_SECRET}|g" \
+      -e "s|{{PAPERCLIP_INTERNAL_URL}}|${PAPERCLIP_INTERNAL_URL}|g" \
+      -e "s|{{PAPERCLIP_AGENT_KEY}}|${PAPERCLIP_AGENT_KEY}|g" \
       "$out"
+
+    # Patch credential IDs
+    python3 -c "
+import json, sys
+f = sys.argv[1]
+mapping = {}
+if sys.argv[2] and sys.argv[2] not in ('', 'ERR', 'REPLACE_WITH_YOUR_CREDENTIAL_ID'):
+    mapping['telegramApi'] = sys.argv[2]
+if sys.argv[3] and sys.argv[3] not in ('', 'REPLACE_WITH_YOUR_CREDENTIAL_ID'):
+    mapping['postgres'] = sys.argv[3]
+if sys.argv[4] and sys.argv[4] not in ('', 'REPLACE_WITH_YOUR_CREDENTIAL_ID'):
+    mapping['anthropicApi'] = sys.argv[4]
+if sys.argv[5] and sys.argv[5] not in ('',):
+    mapping['openAiApi'] = sys.argv[5]
+if len(sys.argv) > 6 and sys.argv[6] and sys.argv[6] not in ('', 'REPLACE_WITH_YOUR_CREDENTIAL_ID'):
+    mapping['httpHeaderAuth'] = sys.argv[6]
+slack_id = sys.argv[7] if len(sys.argv) > 7 and sys.argv[7] else ''
+with open(f) as fh:
+    wf = json.load(fh)
+for node in wf.get('nodes', []):
+    for cred_type, cred_data in node.get('credentials', {}).items():
+        if cred_type in mapping:
+            cred_data['id'] = mapping[cred_type]
+    # If Slack credential exists, patch + enable Slack nodes
+    if slack_id:
+        for sk in ('slackOAuth2Api', 'slackApi'):
+            if sk in node.get('credentials', {}):
+                node['credentials'][sk]['id'] = slack_id
+                node.pop('disabled', None)
+with open(f, 'w') as fh:
+    json.dump(wf, fh, indent=2, ensure_ascii=False)
+" "$out" "${TELEGRAM_CRED_ID:-}" "${POSTGRES_CRED_ID:-}" "${ANTHROPIC_CRED_ID:-}" "${OPENAI_CRED_ID:-}" "${HEADERAUTH_CRED_ID:-}" "${EXISTING_SLACK_ID:-}"
 
     resp=$(curl -s -X POST "${N8N_BASE}/api/v1/workflows" \
       -H "X-N8N-API-KEY: ${N8N_API_KEY}" \
@@ -595,7 +699,7 @@ else
 echo -e "\n${GREEN}📦 Importing workflows...${NC}"
 mkdir -p workflows/deployed
 
-for f in workflows/*.json; do
+for f in workflows/*.json workflows/adapters/*.json; do
   out="workflows/deployed/$(basename $f)"
   cp "$f" "$out"
   # Basic placeholder replacements
@@ -608,6 +712,9 @@ for f in workflows/*.json; do
     -e "s|{{SUPABASE_ANON_KEY}}|${SUPABASE_ANON_KEY}|g" \
     -e "s|{{TELEGRAM_CHAT_ID}}|${TELEGRAM_CHAT_ID}|g" \
     -e "s|{{CREDENTIAL_FORM_WEBHOOK_ID}}|${CREDENTIAL_FORM_WEBHOOK_ID}|g" \
+    -e "s|{{WEBHOOK_SECRET}}|${WEBHOOK_SECRET}|g" \
+    -e "s|{{PAPERCLIP_INTERNAL_URL}}|${PAPERCLIP_INTERNAL_URL}|g" \
+    -e "s|{{PAPERCLIP_AGENT_KEY}}|${PAPERCLIP_AGENT_KEY}|g" \
     "$out"
   # Credential ID replacements — proper JSON manipulation (sed can't match
   # across line breaks, and "id"/"name" are on separate lines in the JSON)
@@ -623,17 +730,26 @@ if sys.argv[4] and sys.argv[4] not in ('', 'REPLACE_WITH_YOUR_CREDENTIAL_ID'):
     mapping['anthropicApi'] = sys.argv[4]
 if sys.argv[5] and sys.argv[5] not in ('',):
     mapping['openAiApi'] = sys.argv[5]
+if len(sys.argv) > 6 and sys.argv[6] and sys.argv[6] not in ('', 'REPLACE_WITH_YOUR_CREDENTIAL_ID'):
+    mapping['httpHeaderAuth'] = sys.argv[6]
+slack_id = sys.argv[7] if len(sys.argv) > 7 and sys.argv[7] else ''
 with open(f) as fh:
     wf = json.load(fh)
 for node in wf.get('nodes', []):
     for cred_type, cred_data in node.get('credentials', {}).items():
         if cred_type in mapping:
             cred_data['id'] = mapping[cred_type]
+    # If Slack credential exists, patch + enable Slack nodes
+    if slack_id:
+        for sk in ('slackOAuth2Api', 'slackApi'):
+            if sk in node.get('credentials', {}):
+                node['credentials'][sk]['id'] = slack_id
+                node.pop('disabled', None)
 with open(f, 'w') as fh:
     json.dump(wf, fh, indent=2, ensure_ascii=False)
-" "$out" "${TELEGRAM_CRED_ID:-}" "${POSTGRES_CRED_ID:-}" "${ANTHROPIC_CRED_ID:-}" "${OPENAI_CRED_ID:-}"
+" "$out" "${TELEGRAM_CRED_ID:-}" "${POSTGRES_CRED_ID:-}" "${ANTHROPIC_CRED_ID:-}" "${OPENAI_CRED_ID:-}" "${HEADERAUTH_CRED_ID:-}" "${EXISTING_SLACK_ID:-}"
 done
-IMPORT_ORDER="mcp-client reminder-factory reminder-runner mcp-weather-example workflow-builder mcp-builder mcp-library-manager agent-library-manager sub-agent-runner credential-form memory-consolidation background-checker heartbeat n8n-claw-agent"
+IMPORT_ORDER="mcp-client reminder-factory reminder-runner mcp-weather-example workflow-builder mcp-builder mcp-library-manager agent-library-manager sub-agent-runner credential-form memory-consolidation background-checker heartbeat webhook-adapter n8n-claw-agent"
 
 # n8n Public API settings whitelist — the PUT endpoint rejects any settings
 # field not in its OpenAPI schema (additionalProperties: false), even though
