@@ -222,7 +222,7 @@ Sub-workflows (called by other workflows, no manual activation needed):
 | MCP Library Manager | Agent — installs/removes skills from catalog |
 | Sub-Agent Runner | Agent — runs expert agents with loaded personas |
 | Agent Library Manager | Agent — installs/removes expert agents |
-| ReminderFactory | Agent — saves reminders/tasks to database |
+| ReminderFactory | Agent — creates, lists, edits, and deletes reminders/tasks |
 | credential-form | Library Manager — secure form for entering API keys |
 | Webhook Adapter | Connects Slack, Teams, and custom apps to the agent (imported inactive) |
 
@@ -783,6 +783,12 @@ Recurring actions are managed via natural language — list, pause, resume, or d
 > "Show my scheduled actions"
 > "Pause the mail check"
 > "Delete action 2"
+
+One-time reminders can also be listed, edited, and deleted:
+
+> "Show my reminders"
+> "Move reminder 38 to Monday at 10am"
+> "Delete reminder 41"
 
 Reminders and one-time scheduled actions are delivered by the **Reminder Runner** (polls every minute). Recurring actions are executed by the **Heartbeat** (runs every 5 minutes). Missed reminders are automatically delivered on the next run.
 
