@@ -1233,9 +1233,20 @@ echo 'export ANTHROPIC_API_KEY=your_key_here' >> ~/.bashrc
 source ~/.bashrc
 ```
 
-### 3. Create the SSH credential in n8n
+### 3. Generate an SSH key pair
 
-The Claude Code node uses SSH to reach the CLI on the host. You need to create an SSH credential:
+The Claude Code node runs inside Docker and connects to the host via SSH. Most VPS providers disable password authentication by default, so key-based auth is recommended.
+
+```bash
+# Generate a dedicated key pair (no passphrase)
+ssh-keygen -t ed25519 -f ~/.ssh/n8n-claude-code -C "n8n-claude-code" -N ""
+
+# Authorize it
+cat ~/.ssh/n8n-claude-code.pub >> ~/.ssh/authorized_keys
+chmod 600 ~/.ssh/authorized_keys
+```
+
+### 4. Create the SSH credential in n8n
 
 1. In n8n UI → **Credentials** → **Add Credential**
 2. Search for **Claude Code SSH** (comes with the community node)
@@ -1243,10 +1254,11 @@ The Claude Code node uses SSH to reach the CLI on the host. You need to create a
    - **Host:** `172.17.0.1` (this is how Docker containers reach the host machine)
    - **Port:** `22`
    - **Username:** `root` (or whichever user has Claude Code installed)
-   - **Authentication:** Password or SSH Private Key
+   - **Authentication:** SSH Private Key
+   - **Private Key:** paste the contents of `~/.ssh/n8n-claude-code`
 4. Save with the name **`Claude Code Runner SSH`** (must match exactly)
 
-### 4. Activate the workflow
+### 5. Activate the workflow
 
 1. Open the **WorkflowBuilder** workflow in n8n
 2. Click **Activate** (toggle in the top right)
