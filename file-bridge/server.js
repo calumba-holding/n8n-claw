@@ -186,46 +186,61 @@ app.post('/files/:id/forward', async (req, res) => {
   const fp = filePath(req.params.id);
   if (!fs.existsSync(fp)) return res.status(404).json({ error: 'File data missing.' });
 
-  const { url, headers, form_fields, filename, file_field } = req.body;
+  const { url, headers, form_fields, filename, file_field, method, raw_body } = req.body;
   if (!url) return res.status(400).json({ error: 'url is required.' });
 
   const fileBuffer = fs.readFileSync(fp);
-  const boundary = '----FileBridge' + crypto.randomBytes(8).toString('hex');
-  const fieldName = file_field || 'file';
   const uploadName = filename || meta.file_name;
+  const httpMethod = (method || 'POST').toUpperCase();
 
-  // Build multipart body
-  const parts = [];
-  if (form_fields && typeof form_fields === 'object') {
-    for (const [key, val] of Object.entries(form_fields)) {
-      parts.push(
-        `--${boundary}\r\nContent-Disposition: form-data; name="${key}"\r\n\r\n${val}\r\n`
-      );
+  let body;
+  let reqHeaders;
+
+  if (raw_body) {
+    // Raw mode: send file bytes as-is (for WebDAV PUT, resumable uploads)
+    body = fileBuffer;
+    reqHeaders = {
+      'Content-Type': meta.mime_type,
+      'Content-Length': fileBuffer.length,
+      ...(headers || {})
+    };
+  } else {
+    // Multipart/form-data mode (default, for Seafile etc.)
+    const boundary = '----FileBridge' + crypto.randomBytes(8).toString('hex');
+    const fieldName = file_field || 'file';
+
+    const parts = [];
+    if (form_fields && typeof form_fields === 'object') {
+      for (const [key, val] of Object.entries(form_fields)) {
+        parts.push(
+          `--${boundary}\r\nContent-Disposition: form-data; name="${key}"\r\n\r\n${val}\r\n`
+        );
+      }
     }
-  }
-  parts.push(
-    `--${boundary}\r\nContent-Disposition: form-data; name="${fieldName}"; filename="${uploadName}"\r\nContent-Type: ${meta.mime_type}\r\n\r\n`
-  );
+    parts.push(
+      `--${boundary}\r\nContent-Disposition: form-data; name="${fieldName}"; filename="${uploadName}"\r\nContent-Type: ${meta.mime_type}\r\n\r\n`
+    );
 
-  const header = Buffer.from(parts.join(''), 'latin1');
-  const footer = Buffer.from(`\r\n--${boundary}--\r\n`, 'latin1');
-  const body = Buffer.concat([header, fileBuffer, footer]);
-
-  try {
-    const mod = url.startsWith('https') ? require('https') : require('http');
-    const parsed = new URL(url);
-    const reqHeaders = {
+    const header = Buffer.from(parts.join(''), 'latin1');
+    const footer = Buffer.from(`\r\n--${boundary}--\r\n`, 'latin1');
+    body = Buffer.concat([header, fileBuffer, footer]);
+    reqHeaders = {
       'Content-Type': `multipart/form-data; boundary=${boundary}`,
       'Content-Length': body.length,
       ...(headers || {})
     };
+  }
+
+  try {
+    const mod = url.startsWith('https') ? require('https') : require('http');
+    const parsed = new URL(url);
 
     const result = await new Promise((resolve, reject) => {
       const fwdReq = mod.request({
         hostname: parsed.hostname,
         port: parsed.port,
         path: parsed.pathname + parsed.search,
-        method: 'POST',
+        method: httpMethod,
         headers: reqHeaders
       }, (resp) => {
         const chunks = [];
