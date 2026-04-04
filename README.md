@@ -155,9 +155,9 @@ curl -X POST https://YOUR-DOMAIN/webhook/agent \
 
 The `WEBHOOK_SECRET` is shown at the end of setup output (also in `.env`).
 
-### Step 3 — Optional: activate extra workflows
+### Optional: extra workflows
 
-The core agent and all background workflows are activated automatically. These optional workflows can be activated manually in the n8n UI if you need them:
+The core agent and all background workflows are activated automatically. These optional workflows can be activated in the n8n UI if you need them:
 
 | Workflow | Purpose |
 |---|---|
