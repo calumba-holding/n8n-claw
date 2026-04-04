@@ -915,25 +915,31 @@ base_url = sys.argv[5] if len(sys.argv) > 5 else ''
 with open(f) as fh:
     wf = json.load(fh)
 PROVIDERS = {
-    'openai': {'type': '@n8n/n8n-nodes-langchain.lmChatOpenAi', 'ver': 1.3, 'cred': 'openAiApi', 'model_key': 'model', 'tokens_key': 'maxTokens', 'use_rl': True},
-    'openrouter': {'type': '@n8n/n8n-nodes-langchain.lmChatOpenRouter', 'ver': 1, 'cred': 'openRouterApi', 'model_key': 'model', 'tokens_key': 'maxTokens', 'use_rl': False},
-    'ollama': {'type': '@n8n/n8n-nodes-langchain.lmChatOllama', 'ver': 1, 'cred': 'ollamaApi', 'model_key': 'model', 'tokens_key': 'numPredict', 'use_rl': False},
-    'deepseek': {'type': '@n8n/n8n-nodes-langchain.lmChatDeepSeek', 'ver': 1, 'cred': 'deepSeekApi', 'model_key': 'model', 'tokens_key': 'maxTokens', 'use_rl': False},
-    'gemini': {'type': '@n8n/n8n-nodes-langchain.lmChatGoogleGemini', 'ver': 1, 'cred': 'googlePalmApi', 'model_key': 'modelName', 'tokens_key': 'maxOutputTokens', 'use_rl': False},
-    'openai_compatible': {'type': '@n8n/n8n-nodes-langchain.lmChatOpenAi', 'ver': 1.3, 'cred': 'openAiApi', 'model_key': 'model', 'tokens_key': 'maxTokens', 'use_rl': True},
+    'openai': {'type': '@n8n/n8n-nodes-langchain.lmChatOpenAi', 'ver': 1.3, 'cred': 'openAiApi', 'model_key': 'model', 'tokens_key': 'maxTokens', 'use_rl': True, 'dn': 'OpenAI Chat Model'},
+    'openrouter': {'type': '@n8n/n8n-nodes-langchain.lmChatOpenRouter', 'ver': 1, 'cred': 'openRouterApi', 'model_key': 'model', 'tokens_key': 'maxTokens', 'use_rl': False, 'dn': 'OpenRouter Chat Model'},
+    'ollama': {'type': '@n8n/n8n-nodes-langchain.lmChatOllama', 'ver': 1, 'cred': 'ollamaApi', 'model_key': 'model', 'tokens_key': 'numPredict', 'use_rl': False, 'dn': 'Ollama Chat Model'},
+    'deepseek': {'type': '@n8n/n8n-nodes-langchain.lmChatDeepSeek', 'ver': 1, 'cred': 'deepSeekApi', 'model_key': 'model', 'tokens_key': 'maxTokens', 'use_rl': False, 'dn': 'DeepSeek Chat Model'},
+    'gemini': {'type': '@n8n/n8n-nodes-langchain.lmChatGoogleGemini', 'ver': 1, 'cred': 'googlePalmApi', 'model_key': 'modelName', 'tokens_key': 'maxOutputTokens', 'use_rl': False, 'dn': 'Google Gemini Chat Model'},
+    'openai_compatible': {'type': '@n8n/n8n-nodes-langchain.lmChatOpenAi', 'ver': 1.3, 'cred': 'openAiApi', 'model_key': 'model', 'tokens_key': 'maxTokens', 'use_rl': True, 'dn': 'OpenAI Chat Model'},
 }
 if provider not in PROVIDERS:
     sys.exit(0)
 cfg = PROVIDERS[provider]
 changed = False
+renames = {}
 for node in wf.get('nodes', []):
     if node.get('type') != '@n8n/n8n-nodes-langchain.lmChatAnthropic':
         continue
     old_opts = node.get('parameters', {}).get('options', {})
     temp = old_opts.get('temperature')
     tokens = old_opts.get('maxTokensToSample')
+    old_name = node['name']
     node['type'] = cfg['type']
     node['typeVersion'] = cfg['ver']
+    # Rename nodes that reference Anthropic/Claude (but keep functional names like "Fix Model")
+    if old_name in ('Claude', 'Anthropic Chat Model'):
+        node['name'] = cfg['dn']
+        renames[old_name] = cfg['dn']
     model_val = {'__rl': True, 'value': model, 'mode': 'id'} if cfg['use_rl'] else model
     params = {cfg['model_key']: model_val}
     if provider in ('openai', 'openai_compatible'):
@@ -946,6 +952,22 @@ for node in wf.get('nodes', []):
     node['parameters'] = params
     node['credentials'] = {cfg['cred']: {'id': 'REPLACE_WITH_YOUR_CREDENTIAL_ID', 'name': cred_name}}
     changed = True
+# Update connection references for renamed nodes
+if renames:
+    conns = wf.get('connections', {})
+    updated_conns = {}
+    for src, outputs in conns.items():
+        new_src = renames.get(src, src)
+        new_outputs = []
+        for output_group in outputs:
+            new_group = []
+            for conn in output_group:
+                if conn.get('node') in renames:
+                    conn = dict(conn, node=renames[conn['node']])
+                new_group.append(conn)
+            new_outputs.append(new_group)
+        updated_conns[new_src] = new_outputs
+    wf['connections'] = updated_conns
 if changed:
     with open(f, 'w') as fh:
         json.dump(wf, fh, indent=2, ensure_ascii=False)
@@ -1040,6 +1062,7 @@ PROVIDERS = {
         'model_key': 'model',
         'tokens_key': 'maxTokens',
         'use_rl': True,
+        'dn': 'OpenAI Chat Model',
     },
     'openrouter': {
         'type': '@n8n/n8n-nodes-langchain.lmChatOpenRouter',
@@ -1048,6 +1071,7 @@ PROVIDERS = {
         'model_key': 'model',
         'tokens_key': 'maxTokens',
         'use_rl': False,
+        'dn': 'OpenRouter Chat Model',
     },
     'ollama': {
         'type': '@n8n/n8n-nodes-langchain.lmChatOllama',
@@ -1056,6 +1080,7 @@ PROVIDERS = {
         'model_key': 'model',
         'tokens_key': 'numPredict',
         'use_rl': False,
+        'dn': 'Ollama Chat Model',
     },
     'deepseek': {
         'type': '@n8n/n8n-nodes-langchain.lmChatDeepSeek',
@@ -1064,6 +1089,7 @@ PROVIDERS = {
         'model_key': 'model',
         'tokens_key': 'maxTokens',
         'use_rl': False,
+        'dn': 'DeepSeek Chat Model',
     },
     'gemini': {
         'type': '@n8n/n8n-nodes-langchain.lmChatGoogleGemini',
@@ -1072,6 +1098,7 @@ PROVIDERS = {
         'model_key': 'modelName',
         'tokens_key': 'maxOutputTokens',
         'use_rl': False,
+        'dn': 'Google Gemini Chat Model',
     },
     'openai_compatible': {
         'type': '@n8n/n8n-nodes-langchain.lmChatOpenAi',
@@ -1080,20 +1107,26 @@ PROVIDERS = {
         'model_key': 'model',
         'tokens_key': 'maxTokens',
         'use_rl': True,
+        'dn': 'OpenAI Chat Model',
     },
 }
 if provider not in PROVIDERS:
     sys.exit(0)
 cfg = PROVIDERS[provider]
 changed = False
+renames = {}
 for node in wf.get('nodes', []):
     if node.get('type') != '@n8n/n8n-nodes-langchain.lmChatAnthropic':
         continue
     old_opts = node.get('parameters', {}).get('options', {})
     temp = old_opts.get('temperature')
     tokens = old_opts.get('maxTokensToSample')
+    old_name = node['name']
     node['type'] = cfg['type']
     node['typeVersion'] = cfg['ver']
+    if old_name in ('Claude', 'Anthropic Chat Model'):
+        node['name'] = cfg['dn']
+        renames[old_name] = cfg['dn']
     # Build model value
     if cfg['use_rl']:
         model_val = {'__rl': True, 'value': model, 'mode': 'id'}
@@ -1115,6 +1148,21 @@ for node in wf.get('nodes', []):
     node['parameters'] = params
     node['credentials'] = {cfg['cred']: {'id': 'REPLACE_WITH_YOUR_CREDENTIAL_ID', 'name': cred_name}}
     changed = True
+if renames:
+    conns = wf.get('connections', {})
+    updated_conns = {}
+    for src, outputs in conns.items():
+        new_src = renames.get(src, src)
+        new_outputs = []
+        for output_group in outputs:
+            new_group = []
+            for conn in output_group:
+                if conn.get('node') in renames:
+                    conn = dict(conn, node=renames[conn['node']])
+                new_group.append(conn)
+            new_outputs.append(new_group)
+        updated_conns[new_src] = new_outputs
+    wf['connections'] = updated_conns
 if changed:
     with open(f, 'w') as fh:
         json.dump(wf, fh, indent=2, ensure_ascii=False)
@@ -1368,29 +1416,36 @@ print(json.dumps({'name': wf['name'], 'nodes': nodes, 'connections': conns, 'set
     echo "  ✅ Heartbeat → Agent: ${AGENT_WF_ID_FOR_HB}"
   fi
 fi
-# ── 11d. Patch Anthropic credential in Background Checker ──────────
+# ── 11d. Patch LLM credential in Background Checker ──────────
 BG_CHECKER_WF_ID=${WF_IDS['background-checker']}
 if [ -n "$BG_CHECKER_WF_ID" ]; then
-  # Fetch real Anthropic credential ID
+  # Fetch real LLM credential ID (provider-aware)
+  BG_CRED_TYPE="${LLM_CRED_TYPE:-anthropicApi}"
+  BG_CRED_NAME="${LLM_CRED_NAME:-Anthropic API}"
   CRED_LIST_BG=$(curl -s "${N8N_BASE}/api/v1/credentials" -H "X-N8N-API-KEY: ${N8N_API_KEY}")
-  REAL_ANTHROPIC_BG=$(echo "$CRED_LIST_BG" | python3 -c "
+  REAL_LLM_BG=$(echo "$CRED_LIST_BG" | python3 -c "
 import sys,json
+cred_type = sys.argv[1]
 creds=json.load(sys.stdin).get('data',[])
 for c in creds:
-    if c.get('type')=='anthropicApi': print(c['id']); break
-" 2>/dev/null)
+    if c.get('type')==cred_type: print(c['id']); break
+" "${BG_CRED_TYPE}" 2>/dev/null)
 
-  if [ -n "$REAL_ANTHROPIC_BG" ]; then
+  if [ -n "$REAL_LLM_BG" ]; then
     BG_JSON=$(curl -s "${N8N_BASE}/api/v1/workflows/${BG_CHECKER_WF_ID}" \
       -H "X-N8N-API-KEY: ${N8N_API_KEY}")
 
     PATCHED_BG=$(echo "$BG_JSON" | python3 -c "
 import sys, json
 ALLOWED = set('${N8N_SETTINGS_WHITELIST}'.split(','))
-raw = sys.stdin.read()
-raw = raw.replace('REPLACE_WITH_YOUR_CREDENTIAL_ID\", \"name\": \"Anthropic API\"', '${REAL_ANTHROPIC_BG}\", \"name\": \"Anthropic API\"')
-wf = json.loads(raw)
+cred_id = '${REAL_LLM_BG}'
+cred_type = '${BG_CRED_TYPE}'
+wf = json.loads(sys.stdin.read())
 nodes = wf.get('nodes') or wf.get('activeVersion',{}).get('nodes',[])
+for node in nodes:
+    for ct, cd in node.get('credentials', {}).items():
+        if ct == cred_type and ('REPLACE' in cd.get('id','') or cd.get('id','').startswith('cred-')):
+            cd['id'] = cred_id
 conns = wf.get('connections') or wf.get('activeVersion',{}).get('connections',{})
 settings = {k: v for k, v in wf.get('settings',{}).items() if k in ALLOWED}
 print(json.dumps({'name': wf['name'], 'nodes': nodes, 'connections': conns, 'settings': settings}))
@@ -1400,7 +1455,7 @@ print(json.dumps({'name': wf['name'], 'nodes': nodes, 'connections': conns, 'set
       echo "$PATCHED_BG" | curl -s -X PUT "${N8N_BASE}/api/v1/workflows/${BG_CHECKER_WF_ID}" \
         -H "X-N8N-API-KEY: ${N8N_API_KEY}" \
         -H "Content-Type: application/json" -d @- > /dev/null
-      echo "  ✅ Background Checker → Anthropic: ${REAL_ANTHROPIC_BG}"
+      echo "  ✅ Background Checker → ${BG_CRED_NAME}: ${REAL_LLM_BG}"
     fi
   fi
 fi
