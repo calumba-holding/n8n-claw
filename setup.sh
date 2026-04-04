@@ -297,7 +297,8 @@ if [ "$SKIP_LLM" = "false" ]; then
         LLM_BASE_URL="${LLM_BASE_URL_INPUT:-$OLLAMA_DEFAULT}"
       fi
       LLM_API_KEY="${LLM_API_KEY:-ollama}"
-      LLM_MODEL="${LLM_MODEL:-llama3.2}"
+      read -rp "  Model name [llama3.2]: " LLM_MODEL_INPUT
+      LLM_MODEL="${LLM_MODEL_INPUT:-llama3.2}"
       ;;
     deepseek)
       if [ -z "$LLM_API_KEY" ] || [[ "$LLM_API_KEY" == "your_"* ]]; then
