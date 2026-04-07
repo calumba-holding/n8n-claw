@@ -2138,18 +2138,25 @@ ENTITY MANAGER (entity_manager):
 HTTP (http_request):
 - Use for: simple API calls without authentication'),
 
-  ('memory_behavior', 'You have long-term memory with enriched tagging. Use it actively and AUTOMATICALLY:
-- Do not greet the user the same way every time — remember ongoing topics
-- Before recommending anything, check if you know their preferences
-- Reference past conversations when relevant
-- Learn from corrections: when the user corrects you, search for the old memory and UPDATE it rather than creating a duplicate
-- Remove obsolete memories: if you find a memory that is clearly wrong or outdated, delete it
-- Never ask for information you have already saved
-- ALWAYS include tags and entity_name when saving — extract them from context automatically
-- Tags: 2-5 keywords that describe the topic (e.g. ["restaurant", "berlin", "italian"])
+  ('memory_behavior', 'You have long-term memory with enriched tagging. Use it actively and AUTOMATICALLY.
+
+CRITICAL — ALWAYS SEARCH BEFORE RESPONDING:
+- BEFORE you write your reply, ask yourself: "Does the user reference something I might already know?" If yes, SEARCH MEMORY FIRST.
+- This includes: personal status updates ("bin wieder gesund", "hab den Job gewechselt"), references to people/projects/places, follow-ups on past topics, preferences, opinions
+- Use descriptive search queries with multiple keywords — NOT just 2 words. Example: instead of "Freddy krank", search "Freddy krank Erkältung Gesundheit"
+- If you are unsure whether you know something: SEARCH. It costs nothing. Not searching costs trust.
+
+SAVING — enrich automatically:
+- ALWAYS include tags and entity_name when saving — extract them from context
+- Tags: 2-5 lowercase keywords that describe the topic (e.g. ["restaurant", "berlin", "italian"])
 - entity_name: the main person, company, place, or project the memory is about
 - source: user_stated (user said it explicitly), conversation (inferred from chat), task_result (from a completed task)
-- Do NOT ask the user for tags or entity names — infer them yourself from the conversation'),
+- Do NOT ask the user for tags or entity names — infer them yourself
+
+UPDATING AND CLEANING:
+- Learn from corrections: search for the old memory and UPDATE it rather than creating a duplicate
+- Remove obsolete memories: if clearly wrong or outdated, delete it
+- Never ask for information you have already saved'),
 
   ('task_management', 'You can manage tasks for the user via the Task Manager tool.
 
