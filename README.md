@@ -24,6 +24,7 @@ https://github.com/user-attachments/assets/10b7b93d-f482-47c1-a144-80a1b9d1be16
 - [OpenClaw Integration](#openclaw-integration)
 - [Building custom MCP Skills](#building-custom-mcp-skills)
 - [Memory](#memory)
+- [Knowledge Graph](#knowledge-graph)
 - [Project Memory](#project-memory)
 - [Task Management](#task-management)
 - [Reminders & Scheduled Actions](#reminders--scheduled-actions)
@@ -46,7 +47,8 @@ Talk to your agent in natural language — it manages tasks, remembers context a
 
 - **Telegram chat** — talk to your AI agent directly via Telegram
 - **Webhook API** — call the agent from any external system via HTTP (Slack, Teams, Paperclip, custom apps)
-- **Long-term memory** — remembers conversations and important context with optional semantic search (RAG)
+- **Long-term memory** — remembers conversations and important context with semantic search, auto-tagging, and auto-expiry
+- **Knowledge graph** — automatically tracks people, companies, projects, and their relationships
 - **Task management** — create, track, and complete tasks with priorities and due dates
 - **Proactive heartbeat** — automatically reminds you of overdue/urgent tasks
 - **Recurring actions** — repeating tasks on any schedule ("check my emails every 15 minutes", "daily briefing at 8am")
@@ -73,6 +75,7 @@ n8n-claw Agent (Claude Sonnet)
   ├── Task Manager        — create, track, complete tasks
   ├── Project Manager     — persistent project notes (markdown)
   ├── Memory              — save, search, update, delete long-term memories
+  ├── Knowledge Graph     — track entities and relationships automatically
   ├── MCP Client          → calls tools on MCP skill servers
   ├── Library Manager     → install/remove skills from catalog
   ├── MCP Builder          → builds custom skills from scratch
@@ -731,7 +734,38 @@ The agent has a multi-layered memory system — it remembers things you tell it 
 > "Actually, I prefer tea now" — updates the existing coffee preference instead of creating a duplicate
 > "Forget that I like early meetings" — deletes the entry completely
 
-**Memory Consolidation** runs automatically every night at 3am. It summarizes the day's conversations into concise long-term memories with vector embeddings. This keeps the memory efficient and searchable. Requires an embedding API key (OpenAI, Voyage AI, or Ollama — configured during setup).
+**Tags & entity tracking:** Every memory is automatically tagged with English lowercase keywords and linked to named entities (people, companies, projects, etc.). This makes filtering and cross-referencing memories much more effective.
+
+**Auto-expiry:** Memories expire automatically based on their type and importance. Contact info, preferences, and decisions never expire. General memories expire after 90–180 days. This keeps the memory clean without manual maintenance.
+
+**Memory Consolidation** runs automatically every night at 3am. It summarizes the day's conversations into concise long-term memories with vector embeddings, extracts tags and entity names, and cleans up expired entries. Requires an embedding API key (OpenAI, Voyage AI, or Ollama — configured during setup).
+
+</details>
+
+---
+
+<details>
+<summary>
+
+## Knowledge Graph
+
+</summary>
+
+The agent automatically builds a knowledge graph of people, companies, projects, events, and their relationships — no explicit commands needed.
+
+**Automatic entity tracking:** When you mention a person, company, project, or any named entity, the agent silently creates it in the knowledge graph and links it to related entities.
+
+> "Stefan Huber is the CEO of destination.one" — creates entities for Stefan Huber (person) and destination.one (company), plus a "manages" relationship
+
+**Relationship mapping:** The agent tracks how entities relate to each other — who works where, who founded what, which products belong to which company.
+
+**Graph traversal:** Ask about someone's connections and the agent traverses the graph to show the full network:
+
+> "What connections does Stefan Huber have?"
+
+The agent shows all linked entities across multiple hops — companies, co-founders, products, events.
+
+**Linked to memory:** Entities in the knowledge graph are automatically linked to related memories, giving the agent richer context when answering questions.
 
 </details>
 

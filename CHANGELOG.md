@@ -5,6 +5,37 @@ Format based on [Keep a Changelog](https://keepachangelog.com/).
 
 ---
 
+## [1.1.0] — 2026-04-07
+
+### Knowledge System & Bug Fixes
+
+The agent now builds structured knowledge automatically — enriched memories with tags, entity tracking, auto-expiry, and a full knowledge graph with relationship mapping.
+
+### Added
+- **Enriched Memory** — memories now include tags (English lowercase keywords), entity names, and source tracking
+- **Knowledge Graph** — new `kg_entities` and `kg_relations` tables for tracking people, companies, projects, events, and their relationships
+- **Entity Manager** tool — search, save, update, relate, graph traversal, delete entities and relations
+- **Auto-expiry** — memories expire based on category and importance (contact/preference/decision never expire, others after 90–180 days)
+- **Memory Consolidation upgrade** — nightly job now extracts tags and entity names via LLM, sets auto-expiry, and cleans up expired entries
+- **Proactive memory search** — agent searches memory before responding for better contextual answers
+- **MCP connection guide** — docs for connecting Claude Code, Claude Desktop, and Cursor
+- **New skills**: Config Backup, Lexware Office
+
+### Fixed
+- **`$` sign crash in conversations** (#26) — replaced Postgres nodes with PostgREST for Save Conversation and Log, eliminating pg-promise `$N` parameter interpretation
+- **Hidden input hint** (#25) — setup now shows "(input is hidden for security)" when entering API keys. Thanks @LukasRegniet!
+- **Umlaut handling** — `normalize()` transliterates ä→ae, ö→oe, ü→ue, ß→ss instead of stripping them
+- **Recursive CTE** — graph traversal restructured for PostgreSQL 15 compatibility
+- **Migration idempotency** — `004_knowledge.sql` drops both old and new function signatures
+
+### Upgrade from v1.0.0
+```bash
+cd n8n-claw && git pull && ./setup.sh --force
+```
+`--force` is required for the new workflow tools (Entity Manager, updated Memory Save).
+
+---
+
 ## [1.0.0] — 2026-04-05
 
 ### Multi-Provider, Zero Config
