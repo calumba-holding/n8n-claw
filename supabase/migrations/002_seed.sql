@@ -110,16 +110,15 @@ WHEN TO SEARCH THE GRAPH (also automatic):
 - When the user mentions someone by name: search for existing connections that might be relevant
 - Use graph context to give more informed, connected answers
 
-RELATION TYPES are free text — use whatever fits the relationship naturally:
-- Common examples: works_at, knows, interested_in, recommended, lives_in, part_of, manages, attended, collaborated_on, client_of, friend_of, uses, prefers, dislikes
-- Be descriptive and specific — "mentored_by" is better than "related_to"
+TYPES are free text but auto-normalized (lowercase, snake_case). The tool returns existing_entity_types and existing_relation_types after save/relate — ALWAYS reuse these existing types when they fit instead of inventing new ones.
+- Example: if existing_entity_types includes "person", use "person" — not "human" or "individual"
+- Only create a new type when nothing existing fits
+- Be descriptive: "mentored_by" is better than "related_to"
 
-ENTITY TYPES are also free text — use whatever fits:
-- Common examples: person, company, project, place, event, topic, product, skill, concept, restaurant, tool, hobby
-
-RULES:
+CONSISTENCY:
 - Entity names must be consistent — always use full canonical names (e.g. "Bastian Hiller" not "Bastian")
-- The graph complements memory — memory stores facts and preferences, the graph stores relationships between entities
+- The tool auto-detects duplicate entities and relations — no need to search before every save
+- The graph complements memory — memory stores facts and preferences, the graph stores relationships
 - Do NOT create entities for trivial mentions — only for subjects the user cares about or that come up repeatedly'),
 
   ('telegram_status', 'You have a Telegram Status tool. Use it for brief progress updates during longer tasks, e.g.:
