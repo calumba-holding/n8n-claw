@@ -488,21 +488,21 @@ The Library Manager fetches skill templates from GitHub, imports the workflows i
 
 | Category | Examples |
 |---|---|
+| Analytics | Google Analytics |
 | Communication | Gmail, Email (IMAP/SMTP), OpenClaw |
-| Productivity | Todoist, Notion, GitHub, Google Calendar, Google Drive, Nextcloud Files, Seafile, CalDAV, Vikunja, NocoDB CRM |
+| Creativity | Google Media Generation (Nano Banana Pro, Veo 3.1) |
+| Entertainment | TMDB Movies, Recipes, Trivia |
 | Finance | KontoFlux (Open Banking), Exchange Rates, Crypto Prices |
 | Knowledge | Wikipedia, OpenFoodFacts, OpenWebUI Knowledge |
-| Transport | Deutsche Bahn, Route Planner, Wiener Linien |
 | Language | DeepL Translate, Dictionary |
-| News | Hacker News, NewsAPI |
-| Analytics | Google Analytics |
 | Marketing | Google Ads |
 | Meetings | Vexa Meetings |
 | Network | Website Check, IP Geolocation |
+| News | Hacker News, NewsAPI |
+| Productivity | Todoist, Notion, GitHub, Google Calendar, Google Drive, Nextcloud Files, Seafile, CalDAV, Vikunja, NocoDB CRM |
 | Reference | Country Info, Public Holidays, Timezone / World Clock |
+| Transport | Deutsche Bahn, Route Planner, Wiener Linien |
 | Utilities | PDF Tools, QR Code |
-| Entertainment | TMDB Movies, Recipes, Trivia |
-| Creativity | Google Media Generation (Nano Banana Pro, Veo 3.1) |
 
 See the full catalog at [n8n-claw-templates](https://github.com/freddy-schuetz/n8n-claw-templates).
 
