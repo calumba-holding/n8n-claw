@@ -54,8 +54,9 @@ n8n-claw/
 ├── setup.sh                # Automated setup script (see below)
 ├── file-bridge/            # Binary file passthrough REST API (Node.js, session-bound temp files)
 ├── email-bridge/           # IMAP/SMTP REST API microservice (Node.js)
+├── discord-bridge/         # Discord Gateway ↔ webhook bridge (Node.js, optional — compose profile "discord")
 ├── searxng/                # SearXNG web search engine config
-├── docker-compose.yml      # All services: n8n, postgres, postgrest, kong, studio, meta, searxng, crawl4ai, email-bridge
+├── docker-compose.yml      # All services: n8n, postgres, postgrest, kong, studio, meta, searxng, crawl4ai, email-bridge, discord-bridge (optional)
 ├── .env.example            # Environment variable template
 ├── README.md               # User-facing installation guide
 └── CLAUDE.md               # This file

@@ -219,6 +219,36 @@ echo "────────────────────────�
 ask "N8N_API_KEY"        "n8n API Key (Settings → API → Create key)" "" 1
 ask "TELEGRAM_BOT_TOKEN" "Telegram Bot Token (from @BotFather)"      "" 1
 ask "TELEGRAM_CHAT_ID"   "Your Telegram Chat ID (from @userinfobot)" "" 0
+
+# ── Discord (optional) ──
+# Users who don't want Discord see a single y/N and move on. Opting in adds
+# 'discord' to COMPOSE_PROFILES so the bot-sidecar container starts with the
+# rest of the stack further down this script.
+EXISTING_DISCORD_TOKEN=$(grep '^DISCORD_BOT_TOKEN=' .env 2>/dev/null | cut -d= -f2-)
+EXISTING_PROFILES=$(grep '^COMPOSE_PROFILES=' .env 2>/dev/null | cut -d= -f2-)
+if [ -n "$EXISTING_DISCORD_TOKEN" ] && [ "$INSTALL_MODE" != "update" ]; then
+  echo -e "  ${GREEN}💬 Discord: Using existing bot token${NC}"
+elif [ -z "$EXISTING_DISCORD_TOKEN" ]; then
+  read -rp "💬 Enable Discord as an additional chat interface? (y/N): " DISCORD_ENABLE
+  if [[ "$DISCORD_ENABLE" =~ ^[Yy]$ ]]; then
+    echo "  Setup: https://discord.com/developers/applications → New Application → Bot"
+    echo "         Enable 'Message Content Intent' under Bot settings, then copy the token."
+    read -rp "  Discord Bot Token: " DISCORD_BOT_TOKEN_INPUT
+    if [ -n "$DISCORD_BOT_TOKEN_INPUT" ]; then
+      set_env DISCORD_BOT_TOKEN "$DISCORD_BOT_TOKEN_INPUT"
+      if [ -z "$EXISTING_PROFILES" ]; then
+        set_env COMPOSE_PROFILES "discord"
+      elif [[ ",${EXISTING_PROFILES}," != *",discord,"* ]]; then
+        set_env COMPOSE_PROFILES "${EXISTING_PROFILES},discord"
+      fi
+      echo -e "  ${GREEN}✅ Discord bridge will start with the rest of the stack${NC}"
+      echo "  Invite the bot to your server with 'bot' + 'applications.commands' scopes."
+    else
+      echo -e "  ⏭️  Skipped — no token provided"
+    fi
+  fi
+fi
+
 # ── LLM Provider Selection ──
 echo ""
 echo -e "  ${GREEN}🤖 LLM Provider${NC}"
