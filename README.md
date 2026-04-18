@@ -771,6 +771,10 @@ If the embedding API is temporarily unavailable, the agent gracefully falls back
 
 **Memory Consolidation** runs automatically every night at 3am. It summarizes the day's conversations into concise long-term memories with vector embeddings, extracts tags and entity names, and cleans up expired entries. Requires an embedding API key (OpenAI, Voyage AI, or Ollama — configured during setup).
 
+**Insights — pattern extraction (v1.5.0):** The same nightly run does a second pass that extracts behavior patterns, communication styles, and recurring stressors into `category='insight'` memories. New patterns get tagged `new`, `reinforced`, or `contradicted` against the last 7 days. Outdated insights are flagged `metadata.outdated=true` instead of being deleted — temporal validity, not destructive overwrite. The top 3 active insights are silently loaded into the system prompt on every turn so the agent's behavior shapes itself around how you actually work.
+
+**Open Loops (v1.5.0):** Half-finished thoughts ("ich muss noch X prüfen", "vergiss nicht Y") are captured as `category='open_loop'` memories. The Heartbeat checks once every 24h for unresolved loops older than 3 days and proactively asks: *"A few days ago you wanted to Y — did that happen?"* Closed loops keep the original content as audit trail (only `metadata.closed=true` is added).
+
 </details>
 
 ---
