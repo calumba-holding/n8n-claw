@@ -113,6 +113,44 @@ if docker volume inspect n8n-claw_n8n_data > /dev/null 2>&1; then
   # Auto-update from git if possible
   git pull --ff-only 2>/dev/null && echo -e "  ${GREEN}✅ Updated to latest version${NC}" \
     || echo -e "  ⚠️  Could not auto-update — run 'git pull' manually if needed"
+
+  # ── Postgres major-version mismatch check ──────────────────────
+  # docker-compose.yml ships PG17. If the existing data dir is PG15
+  # (and no override pins the image to 15), starting compose would
+  # crash the db container with "database files are incompatible".
+  # Block the update and route the user to --upgrade-pg17.
+  if docker volume inspect n8n-claw_db_data > /dev/null 2>&1; then
+    EXISTING_PG_MAJOR=$(docker run --rm -v n8n-claw_db_data:/data alpine \
+      cat /data/PG_VERSION 2>/dev/null | tr -d '[:space:]' || true)
+    COMPOSE_PG_MAJOR=$(grep -E "^\s+image:\s+supabase/postgres:" docker-compose.yml \
+      | head -n 1 | awk -F: '{print $3}' | tr -d '[:space:]"' | cut -d. -f1)
+    OVERRIDE_PG_MAJOR=""
+    if [ -f docker-compose.override.yml ]; then
+      OVERRIDE_PG_MAJOR=$(grep -E "image:\s+supabase/postgres:" docker-compose.override.yml \
+        | head -n 1 | awk -F: '{print $3}' | tr -d '[:space:]"' | cut -d. -f1)
+    fi
+    EFFECTIVE_PG_MAJOR="${OVERRIDE_PG_MAJOR:-$COMPOSE_PG_MAJOR}"
+    if [ -n "$EXISTING_PG_MAJOR" ] && [ -n "$EFFECTIVE_PG_MAJOR" ] \
+       && [ "$EXISTING_PG_MAJOR" != "$EFFECTIVE_PG_MAJOR" ]; then
+      echo -e "\n${RED}❌ Postgres major-version mismatch${NC}"
+      echo "    Existing data:    PG${EXISTING_PG_MAJOR} (in volume n8n-claw_db_data)"
+      echo "    Configured image: PG${EFFECTIVE_PG_MAJOR} (from docker-compose.yml)"
+      echo ""
+      echo "    Continuing this update would crash the db container with"
+      echo "    'database files are incompatible with server'."
+      echo ""
+      if [ "$EXISTING_PG_MAJOR" = "15" ] && [ "$EFFECTIVE_PG_MAJOR" = "17" ]; then
+        echo -e "    ${GREEN}Run the one-shot data migration:${NC}"
+        echo "      sudo ./setup.sh --upgrade-pg17"
+        echo ""
+        echo "    See README → 'Postgres 17 Upgrade (existing installations)'."
+      else
+        echo "    Restore the matching image manually via docker-compose.override.yml"
+        echo "    or roll docker-compose.yml back to the matching tag."
+      fi
+      exit 1
+    fi
+  fi
 fi
 
 ask() {
