@@ -203,8 +203,9 @@ confirm "Continue with upgrade?" || { echo "Aborted."; exit 0; }
 
 # ── 3. Dump PG15 ─────────────────────────────────────────────
 echo -e "${GREEN}==> Dumping PG15 database${NC}"
+# Use Unix socket (no -h) — always available regardless of TCP-listening state
 docker exec -e PGPASSWORD="$POSTGRES_PASSWORD" "$DB_CONTAINER" \
-    pg_dump -U postgres -h localhost -d postgres \
+    pg_dump -U postgres -d postgres \
             --no-owner --no-privileges --clean --if-exists \
     > "$DUMP_FILE"
 
@@ -245,16 +246,28 @@ docker run -d --name "$DB_TMP_CONTAINER" \
     "$PG17_IMAGE" >/dev/null
 
 echo "    Waiting for initdb + baked-in init to complete..."
+
+# Wait for both:
+#   (a) Postgres reachable via Unix socket (pg_isready returns OK)
+#   (b) Baked-in init has FINISHED creating the standard supabase roles
+#       (the migrate.sh / dbmate step completes only after socket is up).
+# We probe for `supabase_admin` because it's the role created last in the
+# baked-in chain; once it exists, all earlier roles do too.
 READY=0
-for i in $(seq 1 90); do
+for i in $(seq 1 120); do
     if docker exec "$DB_TMP_CONTAINER" pg_isready -U postgres >/dev/null 2>&1; then
-        READY=1; break
+        # Socket is up; now check that init scripts actually completed
+        ROLE_COUNT=$(docker exec -e PGPASSWORD="$POSTGRES_PASSWORD" "$DB_TMP_CONTAINER" \
+            psql -U postgres -At -c "SELECT count(*) FROM pg_roles WHERE rolname='supabase_admin';" 2>/dev/null || echo "0")
+        if [ "$ROLE_COUNT" = "1" ]; then
+            READY=1; break
+        fi
     fi
     sleep 2
 done
 
 if [ "$READY" != "1" ]; then
-    echo -e "${RED}  ✘ Fresh PG17 didn't become ready in 180s${NC}"
+    echo -e "${RED}  ✘ Fresh PG17 didn't become ready in 240s${NC}"
     echo "    Check: docker logs $DB_TMP_CONTAINER"
     exit 1
 fi
@@ -264,15 +277,33 @@ NEW_VERSION=$(docker exec "$DB_TMP_CONTAINER" psql -U postgres -At -c "SHOW serv
     echo -e "${RED}  ✘ Expected PG17, got PG$NEW_VERSION${NC}"
     exit 1
 }
-echo "  ✓ Fresh PG17 cluster ready (with baked-in roles)"
+echo "  ✓ Fresh PG17 cluster ready (with baked-in roles incl. supabase_admin)"
 
 # ── 8. Restore dump ──────────────────────────────────────────
 echo -e "${GREEN}==> Restoring dump into PG17${NC}"
+# Use Unix socket (no -h) — connection-refused on TCP during the brief
+# window between socket-ready and TCP-ready was the bug in v3.
 docker exec -i -e PGPASSWORD="$POSTGRES_PASSWORD" "$DB_TMP_CONTAINER" \
-    psql -U postgres -h localhost -d postgres -v ON_ERROR_STOP=0 \
+    psql -U postgres -d postgres -v ON_ERROR_STOP=0 \
     < "$DUMP_FILE" > "$RESTORE_LOG" 2>&1 || true
 
-# Surface real errors (filter out benign "already exists" / "does not exist, skipping")
+# Hard-fail on connection issues — these indicate the restore never ran.
+if grep -qE 'connection.*refused|server.*not.*running|could not connect' "$RESTORE_LOG"; then
+    echo -e "${RED}  ✘ Restore failed to connect to PG17 — dump never applied.${NC}"
+    echo "    Log excerpt:"
+    grep -iE 'error|refused|fail' "$RESTORE_LOG" | head -10 | sed 's/^/      /'
+    echo ""
+    echo "    Original PG15 data is preserved at $BACKUP_DIR."
+    echo "    Roll back to PG15:"
+    echo "      docker stop $DB_TMP_CONTAINER && docker rm $DB_TMP_CONTAINER"
+    echo "      docker run --rm -v $DB_VOLUME:/dst -v \$(pwd)/$BACKUP_DIR:/src:ro alpine \\"
+    echo "         sh -c 'rm -rf /dst/* /dst/.[!.]* 2>/dev/null; cp -a /src/. /dst/'"
+    echo "      rm -f $OVERRIDE_FILE"
+    echo "      docker compose up -d"
+    exit 1
+fi
+
+# Surface other errors (filter out benign "already exists" / "does not exist, skipping")
 REAL_ERRORS=$(grep -E '^(ERROR|FATAL):' "$RESTORE_LOG" \
     | grep -vE 'already exists|does not exist, skipping' \
     | head -20 || true)
@@ -282,7 +313,7 @@ if [ -n "$REAL_ERRORS" ]; then
     echo ""
     confirm "  Continue despite errors?" || {
         echo ""
-        echo "Aborted. To roll back to PG15:"
+        echo "Aborted. Roll back to PG15:"
         echo "  docker stop $DB_TMP_CONTAINER && docker rm $DB_TMP_CONTAINER"
         echo "  docker run --rm -v $DB_VOLUME:/dst -v \$(pwd)/$BACKUP_DIR:/src:ro alpine \\"
         echo "     sh -c 'rm -rf /dst/* /dst/.[!.]* 2>/dev/null; cp -a /src/. /dst/'"
@@ -293,6 +324,22 @@ if [ -n "$REAL_ERRORS" ]; then
 else
     echo "  ✓ Restore completed without serious errors"
 fi
+
+# Sanity check: verify our app tables actually got data restored.
+# If the restore silently failed (e.g. transaction abort, connection loss),
+# the cluster would have only baked-in tables → row count below threshold.
+SOUL_COUNT=$(docker exec -e PGPASSWORD="$POSTGRES_PASSWORD" "$DB_TMP_CONTAINER" \
+    psql -U postgres -d postgres -At -c "SELECT count(*) FROM public.soul;" 2>/dev/null || echo "0")
+MEM_COUNT=$(docker exec -e PGPASSWORD="$POSTGRES_PASSWORD" "$DB_TMP_CONTAINER" \
+    psql -U postgres -d postgres -At -c "SELECT count(*) FROM public.memory_long;" 2>/dev/null || echo "0")
+
+if [ "$SOUL_COUNT" = "0" ] || [ -z "$SOUL_COUNT" ]; then
+    echo -e "${RED}  ✘ Sanity check failed: public.soul has 0 rows after restore.${NC}"
+    echo "    The restore did not apply your app data. PG15 backup is intact."
+    echo "    Inspect $RESTORE_LOG, then roll back as above."
+    exit 1
+fi
+echo "  ✓ Sanity check passed: soul=$SOUL_COUNT rows, memory_long=$MEM_COUNT rows"
 
 # ── 9. Apply 007 compat migration ────────────────────────────
 echo -e "${GREEN}==> Applying 007_pg17_compat.sql${NC}"
