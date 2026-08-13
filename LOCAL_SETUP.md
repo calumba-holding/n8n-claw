@@ -176,7 +176,7 @@ The following were not tested in this local setup. The core agent works fully wi
 | OpenAI API key | Voice transcription (Whisper) + photo analysis (GPT-4o Vision) | ⚠️ Not tested | Add real OpenAI key to `OpenAI API` credential in n8n |
 | `BRAVE_API_KEY` | Alternative web search for MCP Builder | ⚠️ Not tested | Free at [brave.com/search/api](https://brave.com/search/api) — 2,000 req/month |
 | `NEXTCLOUD_URL/USER/PASS` | CalDAV calendar integration | ⚠️ Not tested | Requires a running Nextcloud instance |
-| `VEXA_API_KEY` | Meeting intelligence | ⚠️ Not tested | Requires a running [Vexa](https://github.com/vexa) instance |
+| Vexa API keys | Meeting bots and transcription (Google Meet, Teams, Zoom) | ✅ Verified against the Vexa cloud API | Not an environment variable. Install the `vexa-meetings` skill, then enter **both** keys through the credential form the agent sends you: the bot key (`vxa_bot_…`) and the transcription key (`vxa_tx_…`). Vexa rejects the wrong key per endpoint with HTTP 403. Self-hosted instances add an optional base URL. |
 
 ---
 

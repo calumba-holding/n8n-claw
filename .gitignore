@@ -15,3 +15,6 @@ website/
 docker-compose.override.yml
 docker-compose.pg17.yml
 volumes/
+
+# Datenbank-Abzuege enthalten Klartext-Zugangsdaten und gehoeren nie ins Repo
+n8n-claw-backup-*.json
